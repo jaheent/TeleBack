@@ -10,3 +10,6 @@
 local.properties
 app/build/
 *.hprof
+# Local AI & tool caches
+graft/.cache/
+.claude/*.local.json
