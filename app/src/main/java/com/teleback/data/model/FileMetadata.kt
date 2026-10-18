@@ -25,8 +25,14 @@ data class FileDiffItem(
     val remoteEntry: FileEntry? = null
 )
 
+data class ScanResult(
+    val directories: List<String>,
+    val files: List<LocalFileItem>
+)
+
 data class DiffSummary(
     val totalLocalFiles: Int,
+    val totalDirectories: Int = 0,
     val addedCount: Int,
     val modifiedCount: Int,
     val unchangedCount: Int,

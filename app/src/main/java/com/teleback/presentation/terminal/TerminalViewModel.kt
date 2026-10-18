@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.teleback.core.cli.CliCommand
 import com.teleback.core.cli.LogLevel
 import com.teleback.core.cli.TerminalLog
+import com.teleback.core.network.ConnectivityObserver
 import com.teleback.core.service.SyncForegroundService
 import com.teleback.data.local.AppDatabase
 import com.teleback.data.local.AppPreferences
@@ -22,7 +23,9 @@ class TerminalViewModel(application: Application) : AndroidViewModel(application
     private val prefs = AppPreferences(application)
     private val syncManager = SyncManager(application)
     private val db = AppDatabase.getDatabase(application)
+    private val connectivityObserver = ConnectivityObserver(application)
 
+    val isOnline: StateFlow<Boolean> = connectivityObserver.isOnline.stateIn(viewModelScope, SharingStarted.Eagerly, true)
     val botToken = prefs.botToken.stateIn(viewModelScope, SharingStarted.Eagerly, null)
     val chatTitle = prefs.chatTitle.stateIn(viewModelScope, SharingStarted.Eagerly, null)
     val folderName = prefs.folderName.stateIn(viewModelScope, SharingStarted.Eagerly, null)

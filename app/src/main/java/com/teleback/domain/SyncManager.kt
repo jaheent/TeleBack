@@ -30,6 +30,10 @@ import java.util.Date
 import java.util.Locale
 
 class SyncManager(private val context: Context) {
+    companion object {
+        const val MAX_SNAPSHOT_LIMIT = 10
+    }
+
     private val prefs = AppPreferences(context)
     private val db = AppDatabase.getDatabase(context)
     private val safHelper = SafStorageHelper(context)
@@ -64,8 +68,9 @@ class SyncManager(private val context: Context) {
         val folderUri = Uri.parse(folderUriStr)
 
         onLog(TerminalLog(level = LogLevel.INFO, message = "Scanning local folder structure..."))
-        val localFiles = safHelper.scanDirectory(folderUri)
-        onLog(TerminalLog(level = LogLevel.PLAIN, message = "Found ${localFiles.size} local files. Computing SHA-256 hashes..."))
+        val scanResult = safHelper.scanDirectory(folderUri)
+        val localFiles = scanResult.files
+        onLog(TerminalLog(level = LogLevel.PLAIN, message = "Found ${scanResult.directories.size} folders, ${localFiles.size} files. Computing SHA-256 hashes..."))
 
         // Compute hashes
         for (file in localFiles) {
@@ -116,6 +121,7 @@ class SyncManager(private val context: Context) {
 
         DiffSummary(
             totalLocalFiles = localFiles.size,
+            totalDirectories = scanResult.directories.size,
             addedCount = diffItems.count { it.status == DiffStatus.ADDED },
             modifiedCount = diffItems.count { it.status == DiffStatus.MODIFIED },
             unchangedCount = diffItems.count { it.status == DiffStatus.UNCHANGED },
@@ -262,6 +268,8 @@ class SyncManager(private val context: Context) {
             val timeTag = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date(timestamp))
             val snapshotId = "snap_$timeTag"
 
+            val scanResult = safHelper.scanDirectory(folderUri)
+
             val manifest = SnapshotManifest(
                 version = 1,
                 snapshotId = snapshotId,
@@ -272,6 +280,7 @@ class SyncManager(private val context: Context) {
                 totalFiles = uploadedFileEntries.size,
                 totalBytes = uploadedFileEntries.sumOf { it.size },
                 isEncrypted = isEncrypted,
+                directories = scanResult.directories,
                 files = uploadedFileEntries
             )
 
@@ -305,7 +314,74 @@ class SyncManager(private val context: Context) {
             )
 
             onLog(TerminalLog(level = LogLevel.OK, message = "Snapshot [$snapshotId] committed & pinned successfully!"))
+
+            // Enforce 10-snapshot limit with smart orphan pruning
+            pruneOldSnapshots(client, chatId, onLog)
+
             manifest
+        }
+    }
+
+    private suspend fun pruneOldSnapshots(
+        client: TelegramApiClient,
+        chatId: Long,
+        onLog: (TerminalLog) -> Unit
+    ) {
+        val allSnapshots = db.snapshotDao().getAllSnapshotsDirect()
+        if (allSnapshots.size <= MAX_SNAPSHOT_LIMIT) return
+
+        val activeSnapshots = allSnapshots.take(MAX_SNAPSHOT_LIMIT)
+        val snapshotsToPrune = allSnapshots.drop(MAX_SNAPSHOT_LIMIT)
+
+        // Collect messageIds that are still in use by the active 10 snapshots
+        val activeMessageIds = mutableSetOf<Long>()
+        for (snapEntity in activeSnapshots) {
+            activeMessageIds.add(snapEntity.manifestMessageId)
+            val snapManifest = runCatching {
+                ManifestManager.json.decodeFromString<SnapshotManifest>(snapEntity.rawJson)
+            }.getOrNull()
+
+            if (snapManifest != null) {
+                for (file in snapManifest.files) {
+                    activeMessageIds.add(file.messageId)
+                    for (chunk in file.chunkParts) {
+                        activeMessageIds.add(chunk.messageId)
+                    }
+                }
+            }
+        }
+
+        for (oldSnap in snapshotsToPrune) {
+            onLog(TerminalLog(level = LogLevel.WARN, message = "Pruning oldest cloud snapshot [${oldSnap.snapshotId}] (limit: $MAX_SNAPSHOT_LIMIT)..."))
+
+            // 1. Unpin & Delete manifest message in Telegram
+            client.unpinChatMessage(chatId, oldSnap.manifestMessageId)
+            client.deleteMessage(chatId, oldSnap.manifestMessageId)
+
+            // 2. Delete orphaned file messages
+            val oldManifest = runCatching {
+                ManifestManager.json.decodeFromString<SnapshotManifest>(oldSnap.rawJson)
+            }.getOrNull()
+
+            var deletedOrphanCount = 0
+            if (oldManifest != null) {
+                for (file in oldManifest.files) {
+                    if (!activeMessageIds.contains(file.messageId)) {
+                        client.deleteMessage(chatId, file.messageId)
+                        deletedOrphanCount++
+                    }
+                    for (chunk in file.chunkParts) {
+                        if (!activeMessageIds.contains(chunk.messageId)) {
+                            client.deleteMessage(chatId, chunk.messageId)
+                            deletedOrphanCount++
+                        }
+                    }
+                }
+            }
+
+            // 3. Delete from local database
+            db.snapshotDao().deleteSnapshot(oldSnap.snapshotId)
+            onLog(TerminalLog(level = LogLevel.OK, message = "Pruned [${oldSnap.snapshotId}]: manifest & $deletedOrphanCount orphaned cloud files removed."))
         }
     }
 
@@ -326,7 +402,13 @@ class SyncManager(private val context: Context) {
             } ?: throw IllegalStateException("No snapshot found to restore.")
 
             val manifest = ManifestManager.json.decodeFromString<SnapshotManifest>(snapshotEntity.rawJson)
-            onLog(TerminalLog(level = LogLevel.INFO, message = "Restoring snapshot [${manifest.snapshotId}] (${manifest.files.size} files)..."))
+            onLog(TerminalLog(level = LogLevel.INFO, message = "Restoring snapshot [${manifest.snapshotId}] (${manifest.directories.size} folders, ${manifest.files.size} files)..."))
+
+            // 1. Recreate directory and subfolder hierarchy first
+            if (manifest.directories.isNotEmpty()) {
+                onLog(TerminalLog(level = LogLevel.PLAIN, message = "Reconstructing ${manifest.directories.size} subdirectories..."))
+                safHelper.createDirectoryStructure(folderUri, manifest.directories)
+            }
 
             var restoredCount = 0
             for ((idx, fileEntry) in manifest.files.withIndex()) {

@@ -219,4 +219,51 @@ class TelegramApiClient(
             }
         }
     }
+
+    suspend fun unpinChatMessage(
+        chatId: Long,
+        messageId: Long
+    ): Result<Boolean> = withContext(Dispatchers.IO) {
+        runCatching {
+            val formBody = okhttp3.FormBody.Builder()
+                .add("chat_id", chatId.toString())
+                .add("message_id", messageId.toString())
+                .build()
+
+            val request = Request.Builder()
+                .url("$baseUrl/unpinChatMessage")
+                .post(formBody)
+                .build()
+
+            client.newCall(request).execute().use { response ->
+                val body = response.body?.string().orEmpty()
+                val parsed = json.decodeFromString<TelegramResponse<Boolean>>(body)
+                parsed.ok
+            }
+        }
+    }
+
+    suspend fun deleteMessage(
+        chatId: Long,
+        messageId: Long
+    ): Result<Boolean> = withContext(Dispatchers.IO) {
+        runCatching {
+            val formBody = okhttp3.FormBody.Builder()
+                .add("chat_id", chatId.toString())
+                .add("message_id", messageId.toString())
+                .build()
+
+            val request = Request.Builder()
+                .url("$baseUrl/deleteMessage")
+                .post(formBody)
+                .build()
+
+            client.newCall(request).execute().use { response ->
+                val body = response.body?.string().orEmpty()
+                val parsed = json.decodeFromString<TelegramResponse<Boolean>>(body)
+                parsed.ok
+            }
+        }
+    }
 }
+

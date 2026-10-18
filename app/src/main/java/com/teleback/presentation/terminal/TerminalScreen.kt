@@ -33,6 +33,7 @@ fun TerminalScreen(
     viewModel: TerminalViewModel = viewModel()
 ) {
     val logs by viewModel.logs.collectAsState()
+    val isOnline by viewModel.isOnline.collectAsState()
     val isBusy by viewModel.isBusy.collectAsState()
     val botToken by viewModel.botToken.collectAsState()
     val chatTitle by viewModel.chatTitle.collectAsState()
@@ -60,6 +61,7 @@ fun TerminalScreen(
             ) {
                 // Retro Header
                 TerminalHeader(
+                    isOnline = isOnline,
                     botName = if (botToken != null) "Ready" else null,
                     chatTitle = chatTitle,
                     folderName = folderName,

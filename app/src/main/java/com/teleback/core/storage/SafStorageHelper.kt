@@ -2,46 +2,49 @@ package com.teleback.core.storage
 
 import android.content.Context
 import android.net.Uri
-import android.provider.DocumentsContract
 import androidx.documentfile.provider.DocumentFile
 import com.teleback.core.crypto.ChecksumUtils
 import com.teleback.data.model.LocalFileItem
+import com.teleback.data.model.ScanResult
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.InputStream
-import java.io.OutputStream
 
 class SafStorageHelper(private val context: Context) {
 
-    suspend fun scanDirectory(treeUri: Uri): List<LocalFileItem> = withContext(Dispatchers.IO) {
+    suspend fun scanDirectory(treeUri: Uri): ScanResult = withContext(Dispatchers.IO) {
         val rootDoc = DocumentFile.fromTreeUri(context, treeUri)
-            ?: return@withContext emptyList()
+            ?: return@withContext ScanResult(emptyList(), emptyList())
 
-        val results = mutableListOf<LocalFileItem>()
-        traverseFolder(rootDoc, "", results)
-        results
+        val directories = mutableListOf<String>()
+        val files = mutableListOf<LocalFileItem>()
+        traverseFolder(rootDoc, "", directories, files)
+        ScanResult(directories = directories, files = files)
     }
 
     private fun traverseFolder(
         parentDoc: DocumentFile,
         currentPath: String,
-        results: MutableList<LocalFileItem>
+        directories: MutableList<String>,
+        files: MutableList<LocalFileItem>
     ) {
-        val files = parentDoc.listFiles()
-        for (file in files) {
-            val fileName = file.name ?: continue
-            val relativePath = if (currentPath.isEmpty()) fileName else "$currentPath/$fileName"
+        val childDocs = parentDoc.listFiles()
+        for (child in childDocs) {
+            val childName = child.name ?: continue
+            val relativePath = if (currentPath.isEmpty()) childName else "$currentPath/$childName"
 
-            if (file.isDirectory) {
-                traverseFolder(file, relativePath, results)
-            } else if (file.isFile) {
-                results.add(
+            if (child.isDirectory) {
+                // Record directory path so empty folders and folder structures are preserved
+                directories.add(relativePath)
+                traverseFolder(child, relativePath, directories, files)
+            } else if (child.isFile) {
+                files.add(
                     LocalFileItem(
-                        uri = file.uri,
+                        uri = child.uri,
                         relativePath = relativePath,
-                        name = fileName,
-                        size = file.length(),
-                        lastModified = file.lastModified()
+                        name = childName,
+                        size = child.length(),
+                        lastModified = child.lastModified()
                     )
                 )
             }
@@ -58,6 +61,32 @@ class SafStorageHelper(private val context: Context) {
         } ?: ""
     }
 
+    suspend fun createDirectoryStructure(
+        treeUri: Uri,
+        directories: List<String>
+    ): Unit = withContext(Dispatchers.IO) {
+        val rootDoc = DocumentFile.fromTreeUri(context, treeUri) ?: return@withContext
+        for (dirPath in directories.sortedBy { it.length }) {
+            ensureDirectoryPath(rootDoc, dirPath)
+        }
+    }
+
+    private fun ensureDirectoryPath(rootDoc: DocumentFile, relativeDirPath: String): DocumentFile? {
+        if (relativeDirPath.isBlank()) return rootDoc
+        val segments = relativeDirPath.split("/")
+        var current = rootDoc
+        for (segment in segments) {
+            val trimmed = segment.trim()
+            if (trimmed.isEmpty()) continue
+            var next = current.findFile(trimmed)
+            if (next == null || !next.isDirectory) {
+                next = current.createDirectory(trimmed) ?: return null
+            }
+            current = next
+        }
+        return current
+    }
+
     suspend fun writeRestoredFile(
         treeUri: Uri,
         relativePath: String,
@@ -65,24 +94,18 @@ class SafStorageHelper(private val context: Context) {
     ): Boolean = withContext(Dispatchers.IO) {
         runCatching {
             val rootDoc = DocumentFile.fromTreeUri(context, treeUri) ?: return@runCatching false
-            val parts = relativePath.split("/")
-            var currentDir = rootDoc
-
-            // Create parent folders if necessary
-            for (i in 0 until parts.size - 1) {
-                val folderName = parts[i]
-                var nextDir = currentDir.findFile(folderName)
-                if (nextDir == null || !nextDir.isDirectory) {
-                    nextDir = currentDir.createDirectory(folderName)
-                        ?: return@runCatching false
-                }
-                currentDir = nextDir
+            val lastSlash = relativePath.lastIndexOf('/')
+            val parentDir = if (lastSlash != -1) {
+                val parentPath = relativePath.substring(0, lastSlash)
+                ensureDirectoryPath(rootDoc, parentPath) ?: return@runCatching false
+            } else {
+                rootDoc
             }
 
-            val targetFileName = parts.last()
+            val targetFileName = if (lastSlash != -1) relativePath.substring(lastSlash + 1) else relativePath
             // Delete existing file if present to overwrite cleanly
-            currentDir.findFile(targetFileName)?.delete()
-            val newFile = currentDir.createFile("application/octet-stream", targetFileName)
+            parentDir.findFile(targetFileName)?.delete()
+            val newFile = parentDir.createFile("application/octet-stream", targetFileName)
                 ?: return@runCatching false
 
             context.contentResolver.openOutputStream(newFile.uri)?.use { out ->

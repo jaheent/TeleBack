@@ -34,5 +34,6 @@ data class SnapshotManifest(
     val totalFiles: Int,
     val totalBytes: Long,
     val isEncrypted: Boolean = true,
+    val directories: List<String> = emptyList(),
     val files: List<FileEntry>
 )

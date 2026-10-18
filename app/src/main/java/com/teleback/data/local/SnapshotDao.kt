@@ -11,6 +11,9 @@ interface SnapshotDao {
     @Query("SELECT * FROM snapshots ORDER BY timestamp DESC")
     fun getAllSnapshots(): Flow<List<SnapshotEntity>>
 
+    @Query("SELECT * FROM snapshots ORDER BY timestamp DESC")
+    suspend fun getAllSnapshotsDirect(): List<SnapshotEntity>
+
     @Query("SELECT * FROM snapshots ORDER BY timestamp DESC LIMIT 1")
     suspend fun getLatestSnapshot(): SnapshotEntity?
 

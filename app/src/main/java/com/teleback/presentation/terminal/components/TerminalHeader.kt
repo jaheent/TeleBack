@@ -34,6 +34,7 @@ import com.teleback.presentation.theme.TerminalTextSecondary
 
 @Composable
 fun TerminalHeader(
+    isOnline: Boolean,
     botName: String?,
     chatTitle: String?,
     folderName: String?,
@@ -69,10 +70,10 @@ fun TerminalHeader(
             }
 
             Row(verticalAlignment = Alignment.CenterVertically) {
-                val statusDotColor = when {
-                    isBusy -> TerminalAmber
-                    botName != null -> TerminalMint
-                    else -> TerminalRed
+                val (statusText, statusDotColor) = when {
+                    !isOnline -> Pair("OFFLINE", TerminalRed)
+                    isBusy -> Pair("SYNCING", TerminalAmber)
+                    else -> Pair("ONLINE", TerminalMint)
                 }
                 Box(
                     modifier = Modifier
@@ -82,9 +83,10 @@ fun TerminalHeader(
                 )
                 Spacer(modifier = Modifier.width(6.dp))
                 Text(
-                    text = if (isBusy) "SYNCING" else if (botName != null) "ONLINE" else "CONFIG REQ",
+                    text = statusText,
                     color = statusDotColor,
-                    fontSize = 10.sp
+                    fontSize = 10.sp,
+                    letterSpacing = 1.sp
                 )
             }
         }
