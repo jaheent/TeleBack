@@ -8,10 +8,13 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.documentfile.provider.DocumentFile
 import com.teleback.presentation.terminal.TerminalScreen
 import com.teleback.presentation.terminal.TerminalViewModel
 import com.teleback.presentation.theme.TeleBackTheme
+import com.teleback.presentation.theme.TeleBackThemeId
 
 class MainActivity : ComponentActivity() {
 
@@ -35,7 +38,8 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
 
         setContent {
-            TeleBackTheme {
+            val selectedThemeId by viewModel.selectedThemeId.collectAsState()
+            TeleBackTheme(themeId = TeleBackThemeId.fromId(selectedThemeId)) {
                 TerminalScreen(
                     onPickFolderClick = {
                         folderPickerLauncher.launch(null)

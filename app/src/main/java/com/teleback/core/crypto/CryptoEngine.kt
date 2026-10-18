@@ -26,6 +26,22 @@ object CryptoEngine {
         return Base64.getEncoder().encodeToString(secretKey.encoded)
     }
 
+    fun deriveKeyFromPassphrase(passphrase: String, salt: String = "teleback_cloud_salt_v1"): String {
+        val factory = javax.crypto.SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256")
+        val spec = javax.crypto.spec.PBEKeySpec(passphrase.toCharArray(), salt.toByteArray(Charsets.UTF_8), 100_000, 256)
+        val secretKey = factory.generateSecret(spec)
+        return Base64.getEncoder().encodeToString(secretKey.encoded)
+    }
+
+    fun isValidKey(keyBase64: String): Boolean {
+        return try {
+            val decoded = Base64.getDecoder().decode(keyBase64.trim())
+            decoded.size == 32
+        } catch (e: Exception) {
+            false
+        }
+    }
+
     private fun getSecretKey(keyBase64: String): SecretKey {
         val decoded = Base64.getDecoder().decode(keyBase64)
         return SecretKeySpec(decoded, ALGORITHM)

@@ -28,8 +28,14 @@ class AppPreferences(private val context: Context) {
         val KEY_ENCRYPTION_ENABLED = booleanPreferencesKey("encryption_enabled")
         val KEY_AUTO_SYNC = booleanPreferencesKey("auto_sync_enabled")
         val KEY_SYNC_INTERVAL = intPreferencesKey("sync_interval_hours")
+        val KEY_HAS_SEEN_WELCOME = booleanPreferencesKey("has_seen_welcome")
+        val KEY_THEME_ID = stringPreferencesKey("app_theme_id")
+        val KEY_ACTIVE_ICON_ID = stringPreferencesKey("app_active_icon_id")
     }
 
+    val hasSeenWelcome: Flow<Boolean> = context.dataStore.data.map { it[KEY_HAS_SEEN_WELCOME] ?: false }
+    val selectedThemeId: Flow<String> = context.dataStore.data.map { it[KEY_THEME_ID] ?: "matrix_mint" }
+    val selectedIconId: Flow<String> = context.dataStore.data.map { it[KEY_ACTIVE_ICON_ID] ?: "icon_a" }
     val botToken: Flow<String?> = context.dataStore.data.map { it[KEY_BOT_TOKEN] }
     val chatId: Flow<Long?> = context.dataStore.data.map { it[KEY_CHAT_ID] }
     val chatTitle: Flow<String?> = context.dataStore.data.map { it[KEY_CHAT_TITLE] }
@@ -69,6 +75,18 @@ class AppPreferences(private val context: Context) {
 
     suspend fun setEncryptionEnabled(enabled: Boolean) {
         context.dataStore.edit { it[KEY_ENCRYPTION_ENABLED] = enabled }
+    }
+
+    suspend fun setHasSeenWelcome(seen: Boolean = true) {
+        context.dataStore.edit { it[KEY_HAS_SEEN_WELCOME] = seen }
+    }
+
+    suspend fun saveThemeId(themeId: String) {
+        context.dataStore.edit { it[KEY_THEME_ID] = themeId }
+    }
+
+    suspend fun saveIconId(iconId: String) {
+        context.dataStore.edit { it[KEY_ACTIVE_ICON_ID] = iconId }
     }
 
     suspend fun getOrGenerateMasterKey(): String {

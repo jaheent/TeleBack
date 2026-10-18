@@ -4,6 +4,7 @@ enum class CliCommand(
     val number: Int,
     val commandName: String,
     val aliases: List<String>,
+    val shortLabel: String,
     val description: String,
     val usage: String
 ) {
@@ -11,6 +12,7 @@ enum class CliCommand(
         number = 1,
         commandName = "sync",
         aliases = listOf("s", "diff-sync"),
+        shortLabel = "Diff update",
         description = "Incremental diff sync to cloud",
         usage = "1  or  sync [--dry-run]"
     ),
@@ -18,6 +20,7 @@ enum class CliCommand(
         number = 2,
         commandName = "backup",
         aliases = listOf("b", "push"),
+        shortLabel = "Full backup",
         description = "Force complete folder backup",
         usage = "2  or  backup"
     ),
@@ -25,6 +28,7 @@ enum class CliCommand(
         number = 3,
         commandName = "restore",
         aliases = listOf("r", "pull", "download"),
+        shortLabel = "Pick snapshot",
         description = "Browse & download snapshot",
         usage = "3  or  restore [snapshot_id]"
     ),
@@ -32,6 +36,7 @@ enum class CliCommand(
         number = 4,
         commandName = "snapshot",
         aliases = listOf("snap", "tag"),
+        shortLabel = "Tagged version",
         description = "Create tagged version point",
         usage = "4  or  snapshot -m \"Label\""
     ),
@@ -39,6 +44,7 @@ enum class CliCommand(
         number = 5,
         commandName = "status",
         aliases = listOf("st", "diff"),
+        shortLabel = "Diff & folder",
         description = "Show target folder diff & state",
         usage = "5  or  status"
     ),
@@ -46,20 +52,23 @@ enum class CliCommand(
         number = 6,
         commandName = "test",
         aliases = listOf("ping", "health"),
+        shortLabel = "Bot & group",
         description = "Test bot & Telegram group link",
         usage = "6  or  test"
     ),
-    INIT(
+    CUSTOM(
         number = 7,
-        commandName = "init",
-        aliases = listOf("setup", "config"),
-        description = "Interactive setup & folder picker",
-        usage = "7  or  init"
+        commandName = "custom",
+        aliases = listOf("theme", "themes", "icon", "icons", "style"),
+        shortLabel = "Themes & icons",
+        description = "Select themes and visual icons",
+        usage = "7  or  custom"
     ),
     KEYS(
         number = 8,
         commandName = "keys",
         aliases = listOf("key", "crypto"),
+        shortLabel = "Export / import",
         description = "View / export AES-256 master key",
         usage = "8  or  keys"
     ),
@@ -67,15 +76,17 @@ enum class CliCommand(
         number = 9,
         commandName = "clear",
         aliases = listOf("cls", "c"),
+        shortLabel = "Clear console",
         description = "Clear terminal console output",
         usage = "9  or  clear"
     ),
-    HELP(
+    SETUP(
         number = 0,
-        commandName = "help",
-        aliases = listOf("h", "?"),
-        description = "Show command syntax & shortcuts",
-        usage = "0  or  help"
+        commandName = "setup",
+        aliases = listOf("init", "config", "wizard"),
+        shortLabel = "Setup & config",
+        description = "Interactive setup & folder picker",
+        usage = "0  or  setup"
     );
 
     companion object {
@@ -83,7 +94,7 @@ enum class CliCommand(
             val clean = input.trim().lowercase()
             if (clean.isEmpty()) return null
 
-            // Check if input is a digit: e.g. "1" or "1 --dry-run"
+            // Check if input is a digit: e.g. "1" or "0"
             val firstToken = clean.split("\\s+".toRegex())[0]
             firstToken.toIntOrNull()?.let { num ->
                 entries.firstOrNull { it.number == num }?.let { return it }

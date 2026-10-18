@@ -1,7 +1,6 @@
 package com.teleback.core.cli
 
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNotNull
 import org.junit.Test
 
 class CliCommandTest {
@@ -14,10 +13,10 @@ class CliCommandTest {
         assertEquals(CliCommand.SNAPSHOT, CliCommand.resolve("4"))
         assertEquals(CliCommand.STATUS, CliCommand.resolve("5"))
         assertEquals(CliCommand.TEST, CliCommand.resolve("6"))
-        assertEquals(CliCommand.INIT, CliCommand.resolve("7"))
+        assertEquals(CliCommand.CUSTOM, CliCommand.resolve("7"))
         assertEquals(CliCommand.KEYS, CliCommand.resolve("8"))
         assertEquals(CliCommand.CLEAR, CliCommand.resolve("9"))
-        assertEquals(CliCommand.HELP, CliCommand.resolve("0"))
+        assertEquals(CliCommand.SETUP, CliCommand.resolve("0"))
     }
 
     @Test
@@ -29,9 +28,12 @@ class CliCommandTest {
         assertEquals(CliCommand.RESTORE, CliCommand.resolve("pull"))
         assertEquals(CliCommand.STATUS, CliCommand.resolve("diff"))
         assertEquals(CliCommand.TEST, CliCommand.resolve("ping"))
-        assertEquals(CliCommand.INIT, CliCommand.resolve("setup"))
-        assertEquals(CliCommand.HELP, CliCommand.resolve("help"))
-        assertEquals(CliCommand.HELP, CliCommand.resolve("?"))
+        assertEquals(CliCommand.CUSTOM, CliCommand.resolve("custom"))
+        assertEquals(CliCommand.CUSTOM, CliCommand.resolve("theme"))
+        assertEquals(CliCommand.KEYS, CliCommand.resolve("keys"))
+        assertEquals(CliCommand.CLEAR, CliCommand.resolve("clear"))
+        assertEquals(CliCommand.SETUP, CliCommand.resolve("setup"))
+        assertEquals(CliCommand.SETUP, CliCommand.resolve("init"))
     }
 
     @Test

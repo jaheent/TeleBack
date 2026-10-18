@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -19,13 +20,15 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.teleback.presentation.customization.CustomizationDialog
 import com.teleback.presentation.onboarding.OnboardingDialog
+import com.teleback.presentation.onboarding.WelcomeDialog
 import com.teleback.presentation.restore.SnapshotPickerSheet
+import com.teleback.presentation.settings.KeysDialog
+import com.teleback.presentation.terminal.components.CommandGrid
 import com.teleback.presentation.terminal.components.CommandInputBar
-import com.teleback.presentation.terminal.components.CommandMenuCard
 import com.teleback.presentation.terminal.components.TerminalHeader
 import com.teleback.presentation.terminal.components.TerminalLogView
-import com.teleback.presentation.theme.TerminalBlack
 
 @Composable
 fun TerminalScreen(
@@ -41,8 +44,13 @@ fun TerminalScreen(
     val isEncrypted by viewModel.isEncryptionEnabled.collectAsState()
     val masterKey by viewModel.masterKey.collectAsState()
     val snapshots by viewModel.snapshots.collectAsState()
+    val showWelcome by viewModel.showWelcome.collectAsState()
     val showOnboarding by viewModel.showOnboarding.collectAsState()
     val showSnapshotPicker by viewModel.showSnapshotPicker.collectAsState()
+    val showCustomization by viewModel.showCustomization.collectAsState()
+    val showKeysDialog by viewModel.showKeysDialog.collectAsState()
+    val selectedThemeId by viewModel.selectedThemeId.collectAsState()
+    val selectedIconId by viewModel.selectedIconId.collectAsState()
 
     Scaffold(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
@@ -51,7 +59,7 @@ fun TerminalScreen(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(TerminalBlack)
+                .background(MaterialTheme.colorScheme.background)
                 .padding(innerPadding)
                 .windowInsetsPadding(WindowInsets.statusBars)
                 .imePadding()
@@ -69,26 +77,26 @@ fun TerminalScreen(
                     isBusy = isBusy
                 )
 
-                // Expandable Command Menu Guide
-                CommandMenuCard(
-                    onCommandSelected = { cmd ->
-                        viewModel.executeCommand(cmd)
-                    },
-                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp)
-                )
-
                 // Main Monospace Log Stream
                 Box(
                     modifier = Modifier
                         .weight(1f)
-                        .padding(horizontal = 8.dp)
+                        .padding(horizontal = 8.dp, vertical = 4.dp)
                 ) {
                     TerminalLogView(logs = logs)
                 }
 
-                Spacer(modifier = Modifier.height(6.dp))
+                // High-Density 2-Column Command Grid (No Scroll Needed)
+                CommandGrid(
+                    onCommandSelected = { cmd ->
+                        viewModel.executeCommand(cmd)
+                    },
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                )
 
-                // Bottom Numbered Input Bar
+                Spacer(modifier = Modifier.height(2.dp))
+
+                // Bottom Numbered Input Prompt Bar
                 CommandInputBar(
                     onExecuteInput = { input ->
                         viewModel.executeInput(input)
@@ -98,7 +106,15 @@ fun TerminalScreen(
                 Spacer(modifier = Modifier.windowInsetsPadding(WindowInsets.navigationBars))
             }
 
-            // Interactive Onboarding Setup Dialog
+            // First-Run Welcome Dialog
+            if (showWelcome) {
+                WelcomeDialog(
+                    onLaunchSetup = { viewModel.launchSetupFromWelcome() },
+                    onDismiss = { viewModel.dismissWelcome() }
+                )
+            }
+
+            // Interactive Setup Wizard Dialog
             if (showOnboarding) {
                 OnboardingDialog(
                     initialBotToken = botToken,
@@ -120,6 +136,26 @@ fun TerminalScreen(
                         viewModel.runRestore(snapId)
                     },
                     onDismiss = { viewModel.dismissSnapshotPicker() }
+                )
+            }
+
+            // Customization Suite Dialog (Themes & App Icons)
+            if (showCustomization) {
+                CustomizationDialog(
+                    currentThemeId = selectedThemeId,
+                    currentIconId = selectedIconId,
+                    onSelectTheme = { viewModel.setTheme(it) },
+                    onSelectIcon = { viewModel.setIcon(it) },
+                    onDismiss = { viewModel.dismissCustomization() }
+                )
+            }
+
+            // Master Encryption Keys Dialog
+            if (showKeysDialog) {
+                KeysDialog(
+                    currentMasterKey = masterKey ?: "",
+                    onSaveKey = { viewModel.updateMasterKey(it) },
+                    onDismiss = { viewModel.dismissKeysDialog() }
                 )
             }
         }

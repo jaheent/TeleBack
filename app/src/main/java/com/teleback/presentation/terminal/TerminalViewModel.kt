@@ -16,6 +16,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -33,11 +34,17 @@ class TerminalViewModel(application: Application) : AndroidViewModel(application
     val masterKey = prefs.masterKey.stateIn(viewModelScope, SharingStarted.Eagerly, "")
     val snapshots = db.snapshotDao().getAllSnapshots().stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
+    val selectedThemeId = prefs.selectedThemeId.stateIn(viewModelScope, SharingStarted.Eagerly, "matrix_mint")
+    val selectedIconId = prefs.selectedIconId.stateIn(viewModelScope, SharingStarted.Eagerly, "icon_a")
+
     private val _logs = MutableStateFlow<List<TerminalLog>>(emptyList())
     val logs: StateFlow<List<TerminalLog>> = _logs.asStateFlow()
 
     private val _isBusy = MutableStateFlow(false)
     val isBusy: StateFlow<Boolean> = _isBusy.asStateFlow()
+
+    private val _showWelcome = MutableStateFlow(false)
+    val showWelcome: StateFlow<Boolean> = _showWelcome.asStateFlow()
 
     private val _showOnboarding = MutableStateFlow(false)
     val showOnboarding: StateFlow<Boolean> = _showOnboarding.asStateFlow()
@@ -45,8 +52,39 @@ class TerminalViewModel(application: Application) : AndroidViewModel(application
     private val _showSnapshotPicker = MutableStateFlow(false)
     val showSnapshotPicker: StateFlow<Boolean> = _showSnapshotPicker.asStateFlow()
 
+    private val _showCustomization = MutableStateFlow(false)
+    val showCustomization: StateFlow<Boolean> = _showCustomization.asStateFlow()
+
+    private val _showKeysDialog = MutableStateFlow(false)
+    val showKeysDialog: StateFlow<Boolean> = _showKeysDialog.asStateFlow()
+
     init {
         printBanner()
+        checkFirstRunWelcome()
+    }
+
+    private fun checkFirstRunWelcome() {
+        viewModelScope.launch {
+            val seen = prefs.hasSeenWelcome.first()
+            if (!seen) {
+                _showWelcome.value = true
+            }
+        }
+    }
+
+    fun dismissWelcome() {
+        viewModelScope.launch {
+            prefs.setHasSeenWelcome(true)
+            _showWelcome.value = false
+        }
+    }
+
+    fun launchSetupFromWelcome() {
+        viewModelScope.launch {
+            prefs.setHasSeenWelcome(true)
+            _showWelcome.value = false
+            _showOnboarding.value = true
+        }
     }
 
     private fun printBanner() {
@@ -55,8 +93,8 @@ class TerminalViewModel(application: Application) : AndroidViewModel(application
             TerminalLog(level = LogLevel.OK,    message = " TeleBack v1.0 — Decentralized Telegram Cloud Storage"),
             TerminalLog(level = LogLevel.INFO,  message = " Target: Android 15+ | Zero-Signup | AES-256-GCM"),
             TerminalLog(level = LogLevel.PLAIN, message = "=================================================="),
-            TerminalLog(level = LogLevel.INFO,  message = "Type a number [1-9] or tap a quick chip to run."),
-            TerminalLog(level = LogLevel.PLAIN, message = "Type [7] or 'init' to configure bot & folder.")
+            TerminalLog(level = LogLevel.INFO,  message = "Type a number [1-0] or tap a 2-column chip to run."),
+            TerminalLog(level = LogLevel.PLAIN, message = "Type [0] or 'setup' to configure bot & folder.")
         )
         _logs.value = banner
     }
@@ -71,9 +109,14 @@ class TerminalViewModel(application: Application) : AndroidViewModel(application
 
         addLog(TerminalLog(level = LogLevel.CMD, message = "> $trimmed"))
 
+        if (trimmed.equals("help", ignoreCase = true) || trimmed == "?") {
+            showHelp()
+            return
+        }
+
         val command = CliCommand.resolve(trimmed)
         if (command == null) {
-            addLog(TerminalLog(level = LogLevel.ERR, message = "Unknown command: '$trimmed'. Type '0' or 'help' for command list."))
+            addLog(TerminalLog(level = LogLevel.ERR, message = "Unknown command: '$trimmed'. Type 'help' for command list."))
             return
         }
 
@@ -99,10 +142,10 @@ class TerminalViewModel(application: Application) : AndroidViewModel(application
             }
             CliCommand.STATUS -> runStatusCheck()
             CliCommand.TEST -> runConnectionTest()
-            CliCommand.INIT -> _showOnboarding.value = true
-            CliCommand.KEYS -> showKeys()
+            CliCommand.CUSTOM -> _showCustomization.value = true
+            CliCommand.KEYS -> _showKeysDialog.value = true
             CliCommand.CLEAR -> _logs.value = emptyList()
-            CliCommand.HELP -> showHelp()
+            CliCommand.SETUP -> _showOnboarding.value = true
         }
     }
 
@@ -202,6 +245,30 @@ class TerminalViewModel(application: Application) : AndroidViewModel(application
 
     fun dismissOnboarding() { _showOnboarding.value = false }
     fun dismissSnapshotPicker() { _showSnapshotPicker.value = false }
+    fun dismissCustomization() { _showCustomization.value = false }
+    fun dismissKeysDialog() { _showKeysDialog.value = false }
+
+    fun setTheme(themeId: String) {
+        viewModelScope.launch {
+            prefs.saveThemeId(themeId)
+            addLog(TerminalLog(level = LogLevel.OK, message = "Theme switched to '$themeId'."))
+        }
+    }
+
+    fun setIcon(iconId: String) {
+        viewModelScope.launch {
+            prefs.saveIconId(iconId)
+            com.teleback.core.util.IconSwitcher.switchIcon(getApplication(), iconId)
+            addLog(TerminalLog(level = LogLevel.OK, message = "App icon preference set to '$iconId'."))
+        }
+    }
+
+    fun updateMasterKey(newKey: String) {
+        viewModelScope.launch {
+            prefs.saveMasterKey(newKey)
+            addLog(TerminalLog(level = LogLevel.OK, message = "Master Key updated successfully."))
+        }
+    }
 
     fun saveBotToken(token: String) {
         viewModelScope.launch {
