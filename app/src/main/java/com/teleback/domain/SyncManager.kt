@@ -7,13 +7,19 @@ import com.teleback.core.cli.LogLevel
 import com.teleback.core.cli.TerminalLog
 import com.teleback.core.crypto.ChecksumUtils
 import com.teleback.core.crypto.CryptoEngine
+import com.teleback.core.network.ConnectivityObserver
+import com.teleback.core.network.RetryPolicy
 import com.teleback.core.network.TelegramApiClient
+import com.teleback.core.network.TelegramApiException
 import com.teleback.core.storage.FileChunker
 import com.teleback.core.storage.ManifestManager
 import com.teleback.core.storage.SafStorageHelper
+import com.teleback.core.util.SizeFormat
 import com.teleback.data.local.AppDatabase
 import com.teleback.data.local.AppPreferences
+import com.teleback.data.local.PendingUploadEntity
 import com.teleback.data.local.SnapshotEntity
+import com.teleback.data.local.UploadJournal
 import com.teleback.data.model.ChunkPart
 import com.teleback.data.model.DiffStatus
 import com.teleback.data.model.DiffSummary
@@ -24,19 +30,39 @@ import com.teleback.data.model.SnapshotManifest
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.encodeToString
+import java.io.IOException
+import java.security.MessageDigest
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import javax.crypto.AEADBadTagException
+import kotlin.coroutines.cancellation.CancellationException
 
 class SyncManager(private val context: Context) {
     companion object {
         const val MAX_SNAPSHOT_LIMIT = 10
+        private const val OFFLINE_WAIT_TIMEOUT_MS = 30 * 60 * 1000L
+        private const val MAX_SKIPPED_NAMES_LOGGED = 5
     }
 
     private val prefs = AppPreferences(context)
     private val db = AppDatabase.getDatabase(context)
     private val safHelper = SafStorageHelper(context)
+    private val connectivity = ConnectivityObserver(context)
+
+    /** Raised when the very first decryption of a restore fails: almost certainly the wrong Master Key. */
+    private class WrongKeyException : IllegalStateException(
+        "Decryption failed - the Master Key does not match the one used for this backup. " +
+            "Open [8] keys and enter the original key or passphrase, then try again."
+    )
+
+    private class RestoreState {
+        var decryptedOk = false
+    }
+
+    private enum class RestoreOutcome { RESTORED, UP_TO_DATE }
 
     suspend fun getApiClient(): TelegramApiClient? {
         val token = prefs.botToken.first() ?: return null
@@ -44,7 +70,7 @@ class SyncManager(private val context: Context) {
     }
 
     suspend fun testConnection(): Result<String> = withContext(Dispatchers.IO) {
-        val client = getApiClient() ?: return@withContext Result.failure(Exception("Bot token not configured. Run [7] init."))
+        val client = getApiClient() ?: return@withContext Result.failure(Exception("Bot token not configured. Run [0] setup."))
         val startTime = System.currentTimeMillis()
         val me = client.getMe().getOrThrow()
         val latency = System.currentTimeMillis() - startTime
@@ -64,7 +90,7 @@ class SyncManager(private val context: Context) {
     }
 
     suspend fun calculateDiff(onLog: (TerminalLog) -> Unit = {}): DiffSummary = withContext(Dispatchers.IO) {
-        val folderUriStr = prefs.folderUri.first() ?: throw IllegalStateException("Target folder not set. Run [7] init.")
+        val folderUriStr = prefs.folderUri.first() ?: throw IllegalStateException("Target folder not set. Run [0] setup.")
         val folderUri = Uri.parse(folderUriStr)
 
         onLog(TerminalLog(level = LogLevel.INFO, message = "Scanning local folder structure..."))
@@ -131,6 +157,19 @@ class SyncManager(private val context: Context) {
         )
     }
 
+    /** How much of Telegram the stored snapshots occupy. Computed locally, works offline. */
+    suspend fun cloudUsage(): CloudUsage = withContext(Dispatchers.IO) {
+        val manifests = db.snapshotDao().getAllSnapshotsDirect().mapNotNull { entity ->
+            runCatching { ManifestManager.json.decodeFromString<SnapshotManifest>(entity.rawJson) }.getOrNull()
+        }
+        UsageCalculator.compute(manifests, MAX_SNAPSHOT_LIMIT)
+    }
+
+    /** Number of already-uploaded parts waiting to be reused by an interrupted sync. */
+    suspend fun pendingUploadParts(): Int = withContext(Dispatchers.IO) {
+        db.pendingUploadDao().count()
+    }
+
     suspend fun runBackupOrSync(
         isForceFullBackup: Boolean,
         tag: String? = null,
@@ -138,13 +177,14 @@ class SyncManager(private val context: Context) {
         onLog: (TerminalLog) -> Unit
     ): Result<SnapshotManifest> = withContext(Dispatchers.IO) {
         runCatching {
-            val client = getApiClient() ?: throw IllegalStateException("Bot token missing. Run [7] init.")
-            val chatId = prefs.chatId.first() ?: throw IllegalStateException("Telegram Group ID missing. Run [7] init.")
-            val folderUriStr = prefs.folderUri.first() ?: throw IllegalStateException("Target folder missing. Run [7] init.")
+            val client = getApiClient() ?: throw IllegalStateException("Bot token missing. Run [0] setup.")
+            val chatId = prefs.chatId.first() ?: throw IllegalStateException("Telegram Group ID missing. Run [0] setup.")
+            val folderUriStr = prefs.folderUri.first() ?: throw IllegalStateException("Target folder missing. Run [0] setup.")
             val folderName = prefs.folderName.first() ?: "BackupFolder"
             val folderUri = Uri.parse(folderUriStr)
             val isEncrypted = prefs.isEncryptionEnabled.first()
             val masterKey = prefs.getOrGenerateMasterKey()
+            val journalKey = if (isEncrypted) keyFingerprint(masterKey) else ""
 
             onLog(TerminalLog(level = LogLevel.INFO, message = if (isForceFullBackup) "Starting FULL BACKUP..." else "Starting DIFFERENTIAL SYNC..."))
             onLog(TerminalLog(level = LogLevel.PLAIN, message = "Target: $folderName | Encrypted: $isEncrypted"))
@@ -168,11 +208,19 @@ class SyncManager(private val context: Context) {
                 )
             }
 
+            purgeExpiredJournal(client, chatId, onLog)
+            val pending = db.pendingUploadDao().count()
+            if (pending > 0) {
+                onLog(TerminalLog(level = LogLevel.INFO, message = "Found $pending part(s) from an interrupted sync - they will be reused, not uploaded again."))
+            }
+
             val filesToUpload = diff.items.filter {
                 isForceFullBackup || it.status == DiffStatus.ADDED || it.status == DiffStatus.MODIFIED
             }
 
             val uploadedFileEntries = mutableListOf<FileEntry>()
+            val skippedFiles = mutableListOf<String>()
+            var uploadedCount = 0
             var filesProcessed = 0
 
             for (item in filesToUpload) {
@@ -183,75 +231,27 @@ class SyncManager(private val context: Context) {
                     message = "[$filesProcessed/${filesToUpload.size}] Uploading ${localFile.relativePath} (${formatSize(localFile.size)})..."
                 ))
 
-                val rawBytes = safHelper.openInputStream(localFile.uri)?.use { it.readBytes() }
-                    ?: throw IllegalStateException("Could not read local file ${localFile.relativePath}")
-
-                // Encrypt if enabled
-                val processedBytes = if (isEncrypted) {
-                    CryptoEngine.encryptBytes(rawBytes, masterKey)
-                } else {
-                    rawBytes
-                }
-
-                // Check chunking
-                if (FileChunker.shouldChunk(processedBytes.size.toLong())) {
-                    val chunks = FileChunker.splitIntoChunks(processedBytes)
-                    onLog(TerminalLog(level = LogLevel.PLAIN, message = "File >45MB: Split into ${chunks.size} chunks"))
-                    val chunkParts = mutableListOf<ChunkPart>()
-                    for ((idx, chunkBytes) in chunks.withIndex()) {
-                        val partName = "${localFile.name}.part${idx + 1}"
-                        val msg = client.sendDocument(
-                            chatId = chatId,
-                            fileName = partName,
-                            fileBytes = chunkBytes,
-                            caption = "Part ${idx + 1}/${chunks.size} of ${localFile.relativePath}"
-                        ).getOrThrow()
-
-                        val doc = msg.document ?: throw IllegalStateException("No document received in Telegram response")
-                        chunkParts.add(
-                            ChunkPart(
-                                partIndex = idx + 1,
-                                size = chunkBytes.size.toLong(),
-                                sha256 = ChecksumUtils.sha256(chunkBytes),
-                                messageId = msg.messageId,
-                                fileId = doc.fileId
-                            )
-                        )
-                    }
+                try {
                     uploadedFileEntries.add(
-                        FileEntry(
-                            relativePath = localFile.relativePath,
-                            size = localFile.size,
-                            sha256 = localFile.sha256 ?: ChecksumUtils.sha256(rawBytes),
-                            modifiedAt = localFile.lastModified,
-                            messageId = chunkParts.first().messageId,
-                            fileId = chunkParts.first().fileId,
-                            chunkCount = chunks.size,
-                            chunkParts = chunkParts
-                        )
+                        uploadFile(client, chatId, localFile, isEncrypted, masterKey, journalKey, onLog)
                     )
-                } else {
-                    val uploadFileName = if (isEncrypted) "${localFile.name}.tbk" else localFile.name
-                    val msg = client.sendDocument(
-                        chatId = chatId,
-                        fileName = uploadFileName,
-                        fileBytes = processedBytes,
-                        caption = "TeleBack File: ${localFile.relativePath}"
-                    ).getOrThrow()
-
-                    val doc = msg.document ?: throw IllegalStateException("No document received in Telegram response")
-                    uploadedFileEntries.add(
-                        FileEntry(
-                            relativePath = localFile.relativePath,
-                            size = localFile.size,
-                            sha256 = localFile.sha256 ?: ChecksumUtils.sha256(rawBytes),
-                            modifiedAt = localFile.lastModified,
-                            messageId = msg.messageId,
-                            fileId = doc.fileId,
-                            chunkCount = 1
-                        )
-                    )
+                    uploadedCount++
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    // One bad file must not block the whole backup: skip it, keep the previous
+                    // version in the snapshot (if any), and retry it on the next sync.
+                    skippedFiles.add(localFile.relativePath)
+                    onLog(TerminalLog(level = LogLevel.ERR, message = "Skipped ${localFile.relativePath}: ${describe(e)}"))
+                    item.remoteEntry?.let { uploadedFileEntries.add(it) }
                 }
+            }
+
+            if (filesToUpload.isNotEmpty() && uploadedCount == 0) {
+                throw IllegalStateException(
+                    "All ${filesToUpload.size} upload(s) failed, so no snapshot was created. " +
+                        "Check your connection and run sync again - finished parts are kept and will be resumed."
+                )
             }
 
             // Carry over unchanged files if this was incremental sync
@@ -284,15 +284,18 @@ class SyncManager(private val context: Context) {
                 files = uploadedFileEntries
             )
 
+            // The manifest is uploaded last: until it lands, the previous snapshot stays intact.
             onLog(TerminalLog(level = LogLevel.SNAP, message = "Creating snapshot manifest [$snapshotId]..."))
             val manifestBytes = ManifestManager.serializeManifest(manifest, if (isEncrypted) masterKey else null)
 
-            val manifestMessage = client.sendDocument(
-                chatId = chatId,
-                fileName = "manifest_$snapshotId.json${if (isEncrypted) ".tbk" else ""}",
-                fileBytes = manifestBytes,
-                caption = "${ManifestManager.MANIFEST_TAG} $snapshotId [${tag ?: "Auto"}] - ${uploadedFileEntries.size} files"
-            ).getOrThrow()
+            val manifestMessage = RetryPolicy.execute(onRetry = retryLogger(onLog, "Manifest upload")) {
+                client.sendDocument(
+                    chatId = chatId,
+                    fileName = "manifest_$snapshotId.json${if (isEncrypted) ".tbk" else ""}",
+                    fileBytes = manifestBytes,
+                    caption = "${ManifestManager.MANIFEST_TAG} $snapshotId [${tag ?: "Auto"}] - ${uploadedFileEntries.size} files"
+                ).getOrThrow()
+            }
 
             // Pin manifest for instant retrieval
             client.pinChatMessage(chatId, manifestMessage.messageId)
@@ -313,13 +316,221 @@ class SyncManager(private val context: Context) {
                 )
             )
 
+            // Everything in this manifest is now referenced: its resume-journal rows are done.
+            val committedIds = uploadedFileEntries
+                .flatMap { entry -> listOf(entry.messageId) + entry.chunkParts.map { it.messageId } }
+                .toSet()
+            db.pendingUploadDao().all()
+                .filter { it.messageId in committedIds }
+                .forEach { db.pendingUploadDao().delete(it.fileSha256, it.chunkIndex) }
+
             onLog(TerminalLog(level = LogLevel.OK, message = "Snapshot [$snapshotId] committed & pinned successfully!"))
+
+            if (skippedFiles.isNotEmpty()) {
+                val names = skippedFiles.take(MAX_SKIPPED_NAMES_LOGGED).joinToString(", ")
+                val more = if (skippedFiles.size > MAX_SKIPPED_NAMES_LOGGED) " and ${skippedFiles.size - MAX_SKIPPED_NAMES_LOGGED} more" else ""
+                onLog(TerminalLog(
+                    level = LogLevel.WARN,
+                    message = "${skippedFiles.size} file(s) skipped: $names$more. Run sync again to retry them."
+                ))
+            }
 
             // Enforce 10-snapshot limit with smart orphan pruning
             pruneOldSnapshots(client, chatId, onLog)
 
             manifest
         }
+    }
+
+    /**
+     * Streams one file to Telegram in 19 MB windows. Only one window is ever held in memory,
+     * each window is encrypted on its own, and every finished part is journaled so an
+     * interrupted upload resumes from the first missing part.
+     */
+    private suspend fun uploadFile(
+        client: TelegramApiClient,
+        chatId: Long,
+        localFile: LocalFileItem,
+        isEncrypted: Boolean,
+        masterKey: String,
+        journalKey: String,
+        onLog: (TerminalLog) -> Unit
+    ): FileEntry {
+        val preSha = localFile.sha256.orEmpty()
+        val expectedChunks = FileChunker.chunkCountFor(localFile.size)
+        val journalDao = db.pendingUploadDao()
+
+        val resumable: Map<Int, PendingUploadEntity> = if (preSha.isNotBlank()) {
+            journalDao.forFile(preSha)
+                .filter { UploadJournal.isReusable(it, isEncrypted, journalKey, expectedChunks) }
+                .associateBy { it.chunkIndex }
+        } else {
+            emptyMap()
+        }
+
+        if (localFile.size > FileChunker.LARGE_FILE_THRESHOLD) {
+            onLog(TerminalLog(
+                level = LogLevel.WARN,
+                message = "Large file (${formatSize(localFile.size)}): $expectedChunks parts of ${FileChunker.DEFAULT_CHUNK_SIZE / (1024 * 1024)} MB. " +
+                    "This can take a while - keep TeleBack open. If it is interrupted, finished parts are reused."
+            ))
+        }
+
+        val digest = MessageDigest.getInstance("SHA-256")
+        val parts = mutableListOf<ChunkPart>()
+        var totalRead = 0L
+        var uploadedBytes = 0L
+        val startedAt = System.currentTimeMillis()
+        var etaLogged = false
+        var index = 0
+
+        val input = safHelper.openInputStream(localFile.uri)
+            ?: throw IllegalStateException("Could not read local file ${localFile.relativePath}")
+
+        input.use { stream ->
+            while (true) {
+                val window = FileChunker.readWindow(stream)
+                if (window.isEmpty() && index > 0) break
+                index++
+                val isLast = window.size < FileChunker.DEFAULT_CHUNK_SIZE
+                totalRead += window.size
+                digest.update(window)
+
+                val cached = resumable[index]
+                if (cached != null) {
+                    parts.add(
+                        ChunkPart(
+                            partIndex = index,
+                            size = cached.partSize,
+                            sha256 = cached.partSha256,
+                            messageId = cached.messageId,
+                            fileId = cached.fileId
+                        )
+                    )
+                    onLog(TerminalLog(level = LogLevel.PLAIN, message = "  part $index/$expectedChunks already in Telegram - resumed"))
+                } else {
+                    val payload = if (isEncrypted) CryptoEngine.encryptBytes(window, masterKey) else window
+                    val partName = if (expectedChunks > 1) {
+                        "${localFile.name}.part$index"
+                    } else {
+                        if (isEncrypted) "${localFile.name}.tbk" else localFile.name
+                    }
+                    val caption = if (expectedChunks > 1) {
+                        "Part $index/$expectedChunks of ${localFile.relativePath}"
+                    } else {
+                        "TeleBack File: ${localFile.relativePath}"
+                    }
+
+                    val msg = RetryPolicy.execute(
+                        onRetry = retryLogger(onLog, "Upload of ${localFile.name} part $index/$expectedChunks")
+                    ) {
+                        client.sendDocument(chatId = chatId, fileName = partName, fileBytes = payload, caption = caption).getOrThrow()
+                    }
+                    val doc = msg.document ?: throw IllegalStateException("No document received in Telegram response")
+                    val partSha = ChecksumUtils.sha256(payload)
+
+                    parts.add(
+                        ChunkPart(
+                            partIndex = index,
+                            size = payload.size.toLong(),
+                            sha256 = partSha,
+                            messageId = msg.messageId,
+                            fileId = doc.fileId
+                        )
+                    )
+                    if (preSha.isNotBlank()) {
+                        journalDao.insert(
+                            PendingUploadEntity(
+                                fileSha256 = preSha,
+                                chunkIndex = index,
+                                relativePath = localFile.relativePath,
+                                chunkCount = expectedChunks,
+                                partSize = payload.size.toLong(),
+                                partSha256 = partSha,
+                                messageId = msg.messageId,
+                                fileId = doc.fileId,
+                                encrypted = isEncrypted,
+                                keyFingerprint = journalKey,
+                                createdAt = System.currentTimeMillis()
+                            )
+                        )
+                    }
+
+                    uploadedBytes += window.size
+                    if (expectedChunks > 1) {
+                        onLog(TerminalLog(level = LogLevel.PLAIN, message = "  part $index/$expectedChunks uploaded"))
+                        if (!etaLogged && index < expectedChunks) {
+                            val elapsedSec = ((System.currentTimeMillis() - startedAt) / 1000.0).coerceAtLeast(0.5)
+                            val bytesPerSec = uploadedBytes / elapsedSec
+                            val remainingBytes = (localFile.size - totalRead).coerceAtLeast(0L)
+                            if (bytesPerSec > 0) {
+                                val etaMin = (remainingBytes / bytesPerSec / 60.0).toInt()
+                                onLog(TerminalLog(
+                                    level = LogLevel.PLAIN,
+                                    message = "  speed ~${formatSize(bytesPerSec.toLong())}/s, about ${if (etaMin < 1) "<1" else etaMin.toString()} min left for this file"
+                                ))
+                            }
+                            etaLogged = true
+                        }
+                    }
+                }
+
+                if (isLast) break
+            }
+        }
+
+        val actualSha = digest.digest().joinToString("") { "%02x".format(it) }
+        if (preSha.isNotBlank() && actualSha != preSha) {
+            onLog(TerminalLog(
+                level = LogLevel.WARN,
+                message = "${localFile.relativePath} changed while it was being backed up; it will be re-synced next time."
+            ))
+        }
+
+        val first = parts.first()
+        return FileEntry(
+            relativePath = localFile.relativePath,
+            size = totalRead,
+            sha256 = actualSha,
+            modifiedAt = localFile.lastModified,
+            messageId = first.messageId,
+            fileId = first.fileId,
+            chunkCount = parts.size,
+            chunkParts = if (parts.size > 1) parts else emptyList(),
+            chunkEncrypted = true
+        )
+    }
+
+    /** Removes parts of interrupted syncs that were never resumed within 7 days. */
+    private suspend fun purgeExpiredJournal(
+        client: TelegramApiClient,
+        chatId: Long,
+        onLog: (TerminalLog) -> Unit
+    ) {
+        val dao = db.pendingUploadDao()
+        val now = System.currentTimeMillis()
+        val expired = dao.all().filter { UploadJournal.isExpired(it, now) }
+        if (expired.isEmpty()) return
+
+        val referenced = mutableSetOf<Long>()
+        for (snap in db.snapshotDao().getAllSnapshotsDirect()) {
+            referenced.add(snap.manifestMessageId)
+            val manifest = runCatching {
+                ManifestManager.json.decodeFromString<SnapshotManifest>(snap.rawJson)
+            }.getOrNull() ?: continue
+            for (file in manifest.files) {
+                referenced.add(file.messageId)
+                file.chunkParts.forEach { referenced.add(it.messageId) }
+            }
+        }
+
+        for (entry in expired) {
+            if (entry.messageId !in referenced) {
+                client.deleteMessage(chatId, entry.messageId)
+            }
+            dao.delete(entry.fileSha256, entry.chunkIndex)
+        }
+        onLog(TerminalLog(level = LogLevel.INFO, message = "Cleaned ${expired.size} abandoned upload part(s) older than 7 days."))
     }
 
     private suspend fun pruneOldSnapshots(
@@ -410,54 +621,174 @@ class SyncManager(private val context: Context) {
                 safHelper.createDirectoryStructure(folderUri, manifest.directories)
             }
 
+            val state = RestoreState()
             var restoredCount = 0
+            var upToDateCount = 0
+            val failedFiles = mutableListOf<String>()
+
             for ((idx, fileEntry) in manifest.files.withIndex()) {
                 onLog(TerminalLog(
                     level = LogLevel.SYNC,
-                    message = "[${idx + 1}/${manifest.files.size}] Downloading ${fileEntry.relativePath}..."
+                    message = "[${idx + 1}/${manifest.files.size}] Restoring ${fileEntry.relativePath} (${formatSize(fileEntry.size)})..."
                 ))
 
-                val rawPayload: ByteArray = if (fileEntry.chunkCount > 1 && fileEntry.chunkParts.isNotEmpty()) {
-                    val parts = mutableListOf<ByteArray>()
-                    for (part in fileEntry.chunkParts) {
-                        val fileInfo = client.getFile(part.fileId).getOrThrow()
-                        val filePath = fileInfo.filePath ?: throw IllegalStateException("Telegram file_path empty")
-                        val partBytes = client.downloadFileBytes(filePath).getOrThrow()
-                        parts.add(partBytes)
+                try {
+                    when (restoreFile(client, folderUri, manifest, fileEntry, masterKey, state, onLog)) {
+                        RestoreOutcome.RESTORED -> restoredCount++
+                        RestoreOutcome.UP_TO_DATE -> {
+                            upToDateCount++
+                            onLog(TerminalLog(level = LogLevel.PLAIN, message = "  already up to date - skipped"))
+                        }
                     }
-                    FileChunker.reassemble(parts)
-                } else {
-                    val fileInfo = client.getFile(fileEntry.fileId).getOrThrow()
-                    val filePath = fileInfo.filePath ?: throw IllegalStateException("Telegram file_path empty")
-                    client.downloadFileBytes(filePath).getOrThrow()
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: WrongKeyException) {
+                    throw e
+                } catch (e: Exception) {
+                    failedFiles.add(fileEntry.relativePath)
+                    onLog(TerminalLog(level = LogLevel.ERR, message = "Could not restore ${fileEntry.relativePath}: ${describe(e)}"))
                 }
-
-                // Decrypt if manifest was encrypted
-                val finalBytes = if (manifest.isEncrypted) {
-                    CryptoEngine.decryptBytes(rawPayload, masterKey)
-                } else {
-                    rawPayload
-                }
-
-                // Verify integrity
-                val actualSha256 = ChecksumUtils.sha256(finalBytes)
-                if (actualSha256 != fileEntry.sha256) {
-                    onLog(TerminalLog(level = LogLevel.WARN, message = "Checksum mismatch on ${fileEntry.relativePath}!"))
-                }
-
-                safHelper.writeRestoredFile(folderUri, fileEntry.relativePath, finalBytes)
-                restoredCount++
             }
 
-            onLog(TerminalLog(level = LogLevel.OK, message = "Restore complete: $restoredCount files successfully written!"))
+            if (manifest.files.isNotEmpty() && restoredCount + upToDateCount == 0) {
+                throw IllegalStateException("Restore failed for all ${manifest.files.size} file(s). Nothing was written.")
+            }
+
+            onLog(TerminalLog(
+                level = LogLevel.OK,
+                message = "Restore complete: $restoredCount restored, $upToDateCount already up to date, ${failedFiles.size} failed."
+            ))
+            if (failedFiles.isNotEmpty()) {
+                onLog(TerminalLog(level = LogLevel.WARN, message = "Existing files were left untouched for the failed ones. Run restore again to retry."))
+            }
             restoredCount
         }
     }
 
-    private fun formatSize(bytes: Long): String {
-        if (bytes < 1024) return "$bytes B"
-        val exp = (Math.log(bytes.toDouble()) / Math.log(1024.0)).toInt()
-        val pre = "KMGTPE"[exp - 1]
-        return "%.1f %sB".format(bytes / Math.pow(1024.0, exp.toDouble()), pre)
+    /**
+     * Restores one file by streaming it into a `.tbpart` temp file, verifying the whole-file
+     * SHA-256, and only then replacing the destination. A failure leaves any existing file intact.
+     */
+    private suspend fun restoreFile(
+        client: TelegramApiClient,
+        folderUri: Uri,
+        manifest: SnapshotManifest,
+        entry: FileEntry,
+        masterKey: String,
+        state: RestoreState,
+        onLog: (TerminalLog) -> Unit
+    ): RestoreOutcome {
+        val existing = safHelper.findExistingFile(folderUri, entry.relativePath)
+        if (existing != null && existing.length() == entry.size &&
+            safHelper.calculateSha256(existing.uri) == entry.sha256
+        ) {
+            return RestoreOutcome.UP_TO_DATE
+        }
+
+        val target = safHelper.openRestoreTarget(folderUri, entry.relativePath)
+            ?: throw IllegalStateException("Cannot create destination file")
+        val digest = MessageDigest.getInstance("SHA-256")
+
+        fun plain(bytes: ByteArray): ByteArray {
+            if (!manifest.isEncrypted) return bytes
+            return try {
+                CryptoEngine.decryptBytes(bytes, masterKey).also { state.decryptedOk = true }
+            } catch (e: AEADBadTagException) {
+                if (!state.decryptedOk) throw WrongKeyException()
+                throw IllegalStateException("Data is corrupted (authentication failed)")
+            }
+        }
+
+        fun emit(bytes: ByteArray) {
+            target.write(bytes)
+            digest.update(bytes)
+        }
+
+        try {
+            if (entry.chunkCount > 1 && entry.chunkParts.isNotEmpty()) {
+                val parts = entry.chunkParts.sortedBy { it.partIndex }
+                if (entry.chunkEncrypted) {
+                    // Streamed format: each part is independent, so memory use stays at one part.
+                    for (part in parts) {
+                        onLog(TerminalLog(level = LogLevel.PLAIN, message = "  part ${part.partIndex}/${parts.size}"))
+                        emit(plain(downloadPart(client, part.fileId, part.sha256, onLog)))
+                    }
+                } else {
+                    // Legacy format: whole file was encrypted, then split.
+                    val downloaded = parts.map { downloadPart(client, it.fileId, it.sha256, onLog) }
+                    emit(plain(FileChunker.reassemble(downloaded)))
+                }
+            } else {
+                emit(plain(downloadPart(client, entry.fileId, null, onLog)))
+            }
+
+            val actualSha = digest.digest().joinToString("") { "%02x".format(it) }
+            if (actualSha != entry.sha256) {
+                throw IllegalStateException("Checksum mismatch after download - file was not written")
+            }
+            if (!target.commit()) {
+                throw IllegalStateException("Could not move the verified file into place")
+            }
+        } catch (e: Throwable) {
+            target.abort()
+            throw e
+        }
+        return RestoreOutcome.RESTORED
     }
+
+    private suspend fun downloadPart(
+        client: TelegramApiClient,
+        fileId: String,
+        expectedSha: String?,
+        onLog: (TerminalLog) -> Unit
+    ): ByteArray = RetryPolicy.execute(onRetry = retryLogger(onLog, "Download")) {
+        val info = try {
+            client.getFile(fileId).getOrThrow()
+        } catch (e: TelegramApiException) {
+            if (e.httpCode == 400 && e.message.orEmpty().contains("too big", ignoreCase = true)) {
+                throw IllegalStateException(
+                    "Telegram will not serve this part to bots because it is over 20 MB. " +
+                        "It was uploaded by an older TeleBack build that used 45 MB parts."
+                )
+            }
+            throw e
+        }
+        val path = info.filePath ?: throw IllegalStateException("Telegram returned no file_path")
+        val bytes = client.downloadFileBytes(path).getOrThrow()
+        if (!expectedSha.isNullOrBlank() && ChecksumUtils.sha256(bytes) != expectedSha) {
+            throw IOException("Downloaded part is corrupted (checksum mismatch)")
+        }
+        bytes
+    }
+
+    private fun keyFingerprint(masterKey: String): String =
+        ChecksumUtils.sha256(masterKey.toByteArray(Charsets.UTF_8)).take(16)
+
+    private fun describe(error: Throwable): String =
+        error.message?.takeIf { it.isNotBlank() } ?: error::class.java.simpleName
+
+    /** Logs each retry; on connectivity errors it also waits (up to 30 min) for the network to return. */
+    private fun retryLogger(
+        onLog: (TerminalLog) -> Unit,
+        what: String
+    ): suspend (Int, Int, Long, Throwable) -> Unit = { attempt, max, delayMs, error ->
+        onLog(TerminalLog(
+            level = LogLevel.WARN,
+            message = "$what failed (attempt $attempt/$max): ${describe(error)}. Retrying in ${delayMs / 1000}s..."
+        ))
+        if (error is IOException) awaitOnline(onLog)
+    }
+
+    private suspend fun awaitOnline(onLog: (TerminalLog) -> Unit) {
+        if (connectivity.isOnline.first()) return
+        onLog(TerminalLog(level = LogLevel.WARN, message = "Offline - waiting for the connection to come back, then resuming..."))
+        val back = withTimeoutOrNull(OFFLINE_WAIT_TIMEOUT_MS) { connectivity.isOnline.first { it } }
+        if (back == true) {
+            onLog(TerminalLog(level = LogLevel.INFO, message = "Back online - resuming."))
+        } else {
+            onLog(TerminalLog(level = LogLevel.ERR, message = "Still offline after 30 min - giving up on this step."))
+        }
+    }
+
+    private fun formatSize(bytes: Long): String = SizeFormat.format(bytes)
 }

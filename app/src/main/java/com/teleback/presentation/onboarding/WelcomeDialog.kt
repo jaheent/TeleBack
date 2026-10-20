@@ -157,7 +157,7 @@ fun WelcomeDialog(
                         contentColor = TerminalBlack
                     )
                 ) {
-                    Text("Launch Setup Wizard [0]", fontFamily = MonospaceFontFamily)
+                    Text("Start Guided Setup [0]", fontFamily = MonospaceFontFamily)
                 }
 
                 Spacer(modifier = Modifier.height(6.dp))

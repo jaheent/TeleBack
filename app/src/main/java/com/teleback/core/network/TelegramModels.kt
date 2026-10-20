@@ -4,11 +4,17 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
 @Serializable
+data class TelegramResponseParameters(
+    @SerialName("retry_after") val retryAfter: Int? = null
+)
+
+@Serializable
 data class TelegramResponse<T>(
     val ok: Boolean,
     val result: T? = null,
     val description: String? = null,
-    @SerialName("error_code") val errorCode: Int? = null
+    @SerialName("error_code") val errorCode: Int? = null,
+    val parameters: TelegramResponseParameters? = null
 )
 
 @Serializable

@@ -115,4 +115,85 @@ class SafStorageHelper(private val context: Context) {
             true
         }.getOrDefault(false)
     }
+
+    /** Looks up an already existing file inside the tree without creating anything. */
+    suspend fun findExistingFile(treeUri: Uri, relativePath: String): DocumentFile? = withContext(Dispatchers.IO) {
+        runCatching {
+            var current = DocumentFile.fromTreeUri(context, treeUri) ?: return@runCatching null
+            for (segment in relativePath.split("/").filter { it.isNotBlank() }) {
+                current = current.findFile(segment) ?: return@runCatching null
+            }
+            if (current.isFile) current else null
+        }.getOrNull()
+    }
+
+    /**
+     * Opens a temporary `<name>.tbpart` file next to the final destination. Data is streamed into
+     * it and only moved over the real file by [RestoreTarget.commit] after the checksum matches,
+     * so a failed or interrupted restore never destroys an existing file.
+     */
+    suspend fun openRestoreTarget(treeUri: Uri, relativePath: String): RestoreTarget? = withContext(Dispatchers.IO) {
+        runCatching {
+            val rootDoc = DocumentFile.fromTreeUri(context, treeUri) ?: return@runCatching null
+            val lastSlash = relativePath.lastIndexOf('/')
+            val parentDir = if (lastSlash != -1) {
+                ensureDirectoryPath(rootDoc, relativePath.substring(0, lastSlash)) ?: return@runCatching null
+            } else {
+                rootDoc
+            }
+            val finalName = if (lastSlash != -1) relativePath.substring(lastSlash + 1) else relativePath
+            val tempName = "$finalName.tbpart"
+
+            parentDir.findFile(tempName)?.delete() // leftover from an interrupted restore
+            val tempFile = parentDir.createFile("application/octet-stream", tempName) ?: return@runCatching null
+            val out = context.contentResolver.openOutputStream(tempFile.uri) ?: run {
+                tempFile.delete()
+                return@runCatching null
+            }
+            RestoreTarget(context, parentDir, tempFile, finalName, out)
+        }.getOrNull()
+    }
+
+    class RestoreTarget internal constructor(
+        private val context: Context,
+        private val parentDir: DocumentFile,
+        private val tempFile: DocumentFile,
+        private val finalName: String,
+        private val output: java.io.OutputStream
+    ) {
+        fun write(bytes: ByteArray) = output.write(bytes)
+
+        /** Replaces any existing file with the verified temp file. Returns false on failure. */
+        fun commit(): Boolean {
+            return try {
+                output.flush()
+                output.close()
+                parentDir.findFile(finalName)?.delete()
+                if (tempFile.renameTo(finalName)) {
+                    true
+                } else {
+                    // Some providers cannot rename: fall back to copying the verified bytes.
+                    val finalFile = parentDir.createFile("application/octet-stream", finalName)
+                        ?: return false
+                    context.contentResolver.openInputStream(tempFile.uri)?.use { input ->
+                        context.contentResolver.openOutputStream(finalFile.uri)?.use { out ->
+                            input.copyTo(out)
+                        } ?: return false
+                    } ?: return false
+                    tempFile.delete()
+                    true
+                }
+            } catch (e: Exception) {
+                abort()
+                false
+            }
+        }
+
+        /** Discards the partial file; any pre-existing destination file stays untouched. */
+        fun abort() {
+            runCatching { output.close() }
+            runCatching { tempFile.delete() }
+        }
+    }
 }
+

@@ -2,17 +2,14 @@ package com.teleback.core.network
 
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
-import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.MultipartBody
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody
 import okio.BufferedSink
-import java.io.File
-import java.io.InputStream
-import java.io.OutputStream
 import java.util.concurrent.TimeUnit
 
 class TelegramApiClient(
@@ -27,6 +24,28 @@ class TelegramApiClient(
     private val fileBaseUrl = "https://api.telegram.org/file/bot$botToken"
     private val json = Json { ignoreUnknownKeys = true; coerceInputValues = true }
 
+    /**
+     * Decodes a Telegram envelope and returns its result, or throws a [TelegramApiException]
+     * carrying the HTTP/Telegram error code (and `retry_after` for rate limits) so callers
+     * can decide whether the failure is worth retrying.
+     */
+    private inline fun <reified T> parseOrThrow(httpCode: Int, body: String, fallback: String): T {
+        val parsed = try {
+            json.decodeFromString<TelegramResponse<T>>(body)
+        } catch (e: SerializationException) {
+            throw TelegramApiException(httpCode, "$fallback (HTTP $httpCode, unreadable response)")
+        } catch (e: IllegalArgumentException) {
+            throw TelegramApiException(httpCode, "$fallback (HTTP $httpCode, unreadable response)")
+        }
+        val result = parsed.result
+        if (parsed.ok && result != null) return result
+        throw TelegramApiException(
+            httpCode = parsed.errorCode ?: httpCode,
+            message = parsed.description ?: fallback,
+            retryAfterSeconds = parsed.parameters?.retryAfter
+        )
+    }
+
     suspend fun getMe(): Result<TelegramUser> = withContext(Dispatchers.IO) {
         runCatching {
             val request = Request.Builder()
@@ -35,12 +54,7 @@ class TelegramApiClient(
                 .build()
             client.newCall(request).execute().use { response ->
                 val body = response.body?.string().orEmpty()
-                val parsed = json.decodeFromString<TelegramResponse<TelegramUser>>(body)
-                if (parsed.ok && parsed.result != null) {
-                    parsed.result
-                } else {
-                    throw RuntimeException(parsed.description ?: "Unknown Telegram error (${response.code})")
-                }
+                parseOrThrow<TelegramUser>(response.code, body, "Unknown Telegram error")
             }
         }
     }
@@ -57,12 +71,7 @@ class TelegramApiClient(
                 .build()
             client.newCall(request).execute().use { response ->
                 val body = response.body?.string().orEmpty()
-                val parsed = json.decodeFromString<TelegramResponse<List<TelegramUpdate>>>(body)
-                if (parsed.ok && parsed.result != null) {
-                    parsed.result
-                } else {
-                    throw RuntimeException(parsed.description ?: "Error fetching updates")
-                }
+                parseOrThrow<List<TelegramUpdate>>(response.code, body, "Error fetching updates")
             }
         }
     }
@@ -85,12 +94,7 @@ class TelegramApiClient(
 
             client.newCall(request).execute().use { response ->
                 val body = response.body?.string().orEmpty()
-                val parsed = json.decodeFromString<TelegramResponse<TelegramMessage>>(body)
-                if (parsed.ok && parsed.result != null) {
-                    parsed.result
-                } else {
-                    throw RuntimeException(parsed.description ?: "Failed to send message")
-                }
+                parseOrThrow<TelegramMessage>(response.code, body, "Failed to send message")
             }
         }
     }
@@ -138,12 +142,7 @@ class TelegramApiClient(
 
             client.newCall(request).execute().use { response ->
                 val body = response.body?.string().orEmpty()
-                val parsed = json.decodeFromString<TelegramResponse<TelegramMessage>>(body)
-                if (parsed.ok && parsed.result != null) {
-                    parsed.result
-                } else {
-                    throw RuntimeException(parsed.description ?: "Failed to upload document (${response.code})")
-                }
+                parseOrThrow<TelegramMessage>(response.code, body, "Failed to upload document")
             }
         }
     }
@@ -156,12 +155,7 @@ class TelegramApiClient(
                 .build()
             client.newCall(request).execute().use { response ->
                 val body = response.body?.string().orEmpty()
-                val parsed = json.decodeFromString<TelegramResponse<TelegramFile>>(body)
-                if (parsed.ok && parsed.result != null) {
-                    parsed.result
-                } else {
-                    throw RuntimeException(parsed.description ?: "Failed to get file info")
-                }
+                parseOrThrow<TelegramFile>(response.code, body, "Failed to get file info")
             }
         }
     }
@@ -177,9 +171,9 @@ class TelegramApiClient(
                 .build()
             client.newCall(request).execute().use { response ->
                 if (!response.isSuccessful) {
-                    throw RuntimeException("Download failed with HTTP ${response.code}")
+                    throw TelegramApiException(response.code, "Download failed with HTTP ${response.code}")
                 }
-                val body = response.body ?: throw RuntimeException("Empty response body")
+                val body = response.body ?: throw TelegramApiException(response.code, "Empty response body")
                 val totalBytes = body.contentLength()
                 val inputStream = body.byteStream()
                 val outputStream = java.io.ByteArrayOutputStream()
@@ -266,4 +260,3 @@ class TelegramApiClient(
         }
     }
 }
-

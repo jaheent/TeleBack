@@ -4,6 +4,7 @@ import android.content.Intent
 import android.net.Uri
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -62,6 +63,7 @@ fun OnboardingDialog(
     onSaveToken: (String) -> Unit,
     onDetectChat: () -> Unit,
     onPickFolderClick: () -> Unit,
+    onOpenGuide: () -> Unit,
     onDismiss: () -> Unit
 ) {
     val context = LocalContext.current
@@ -100,6 +102,15 @@ fun OnboardingDialog(
                         fontFamily = MonospaceFontFamily
                     )
                 }
+
+                Spacer(modifier = Modifier.height(6.dp))
+                Text(
+                    text = "Need help? Open the visual guide",
+                    color = TerminalCyan,
+                    fontSize = 10.sp,
+                    fontFamily = MonospaceFontFamily,
+                    modifier = Modifier.clickable { onOpenGuide() }
+                )
 
                 Spacer(modifier = Modifier.height(12.dp))
 

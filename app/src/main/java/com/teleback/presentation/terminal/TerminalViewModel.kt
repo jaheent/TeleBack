@@ -8,6 +8,7 @@ import com.teleback.core.cli.LogLevel
 import com.teleback.core.cli.TerminalLog
 import com.teleback.core.network.ConnectivityObserver
 import com.teleback.core.service.SyncForegroundService
+import com.teleback.core.util.SizeFormat
 import com.teleback.data.local.AppDatabase
 import com.teleback.data.local.AppPreferences
 import com.teleback.data.local.SnapshotEntity
@@ -19,6 +20,9 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 class TerminalViewModel(application: Application) : AndroidViewModel(application) {
     private val prefs = AppPreferences(application)
@@ -58,6 +62,9 @@ class TerminalViewModel(application: Application) : AndroidViewModel(application
     private val _showKeysDialog = MutableStateFlow(false)
     val showKeysDialog: StateFlow<Boolean> = _showKeysDialog.asStateFlow()
 
+    private val _showWalkthrough = MutableStateFlow(false)
+    val showWalkthrough: StateFlow<Boolean> = _showWalkthrough.asStateFlow()
+
     init {
         printBanner()
         checkFirstRunWelcome()
@@ -83,7 +90,7 @@ class TerminalViewModel(application: Application) : AndroidViewModel(application
         viewModelScope.launch {
             prefs.setHasSeenWelcome(true)
             _showWelcome.value = false
-            _showOnboarding.value = true
+            _showWalkthrough.value = true
         }
     }
 
@@ -145,7 +152,7 @@ class TerminalViewModel(application: Application) : AndroidViewModel(application
             CliCommand.CUSTOM -> _showCustomization.value = true
             CliCommand.KEYS -> _showKeysDialog.value = true
             CliCommand.CLEAR -> _logs.value = emptyList()
-            CliCommand.SETUP -> _showOnboarding.value = true
+            CliCommand.SETUP -> _showWalkthrough.value = true
         }
     }
 
@@ -212,6 +219,37 @@ class TerminalViewModel(application: Application) : AndroidViewModel(application
             } catch (e: Exception) {
                 addLog(TerminalLog(level = LogLevel.ERR, message = "Status check failed: ${e.message}"))
             }
+            printCloudUsage()
+        }
+    }
+
+    /** Prints how much of Telegram the backups occupy. Computed locally, so it also works offline. */
+    private suspend fun printCloudUsage() {
+        try {
+            val usage = syncManager.cloudUsage()
+            addLog(TerminalLog(level = LogLevel.SNAP, message = "CLOUD USAGE"))
+            if (usage.snapshotCount == 0) {
+                addLog(TerminalLog(level = LogLevel.PLAIN, message = "  No snapshots yet. Run [1] sync to create the first one."))
+            } else {
+                val encrypted = if (usage.isEncrypted) {
+                    "yes (+${"%.1f".format(Locale.US, usage.overheadPercent)}% overhead)"
+                } else {
+                    "no"
+                }
+                val lastSync = usage.lastSyncMillis?.let {
+                    SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()).format(Date(it))
+                } ?: "never"
+                addLog(TerminalLog(level = LogLevel.PLAIN, message = "  Snapshots    : ${usage.snapshotCount} / ${usage.snapshotLimit}"))
+                addLog(TerminalLog(level = LogLevel.PLAIN, message = "  Unique files : ${"%,d".format(Locale.US, usage.uniqueFiles)}  (${SizeFormat.format(usage.storedBytes)} stored)"))
+                addLog(TerminalLog(level = LogLevel.PLAIN, message = "  Encrypted    : $encrypted"))
+                addLog(TerminalLog(level = LogLevel.PLAIN, message = "  Last sync    : $lastSync"))
+            }
+            val pending = syncManager.pendingUploadParts()
+            if (pending > 0) {
+                addLog(TerminalLog(level = LogLevel.WARN, message = "Interrupted sync: $pending uploaded part(s) pending. Run [1] sync to resume."))
+            }
+        } catch (e: Exception) {
+            addLog(TerminalLog(level = LogLevel.ERR, message = "Could not read cloud usage: ${e.message}"))
         }
     }
 
@@ -244,6 +282,19 @@ class TerminalViewModel(application: Application) : AndroidViewModel(application
     }
 
     fun dismissOnboarding() { _showOnboarding.value = false }
+    fun dismissWalkthrough() { _showWalkthrough.value = false }
+
+    /** Walkthrough finished (or skipped): continue straight into the setup wizard. */
+    fun continueWalkthroughToSetup() {
+        _showWalkthrough.value = false
+        _showOnboarding.value = true
+    }
+
+    /** "Need help?" from inside the setup wizard: swap back to the visual guide. */
+    fun openWalkthroughFromSetup() {
+        _showOnboarding.value = false
+        _showWalkthrough.value = true
+    }
     fun dismissSnapshotPicker() { _showSnapshotPicker.value = false }
     fun dismissCustomization() { _showCustomization.value = false }
     fun dismissKeysDialog() { _showKeysDialog.value = false }

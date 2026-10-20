@@ -22,6 +22,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.teleback.presentation.customization.CustomizationDialog
 import com.teleback.presentation.onboarding.OnboardingDialog
+import com.teleback.presentation.onboarding.SetupWalkthroughDialog
 import com.teleback.presentation.onboarding.WelcomeDialog
 import com.teleback.presentation.restore.SnapshotPickerSheet
 import com.teleback.presentation.settings.KeysDialog
@@ -49,6 +50,7 @@ fun TerminalScreen(
     val showSnapshotPicker by viewModel.showSnapshotPicker.collectAsState()
     val showCustomization by viewModel.showCustomization.collectAsState()
     val showKeysDialog by viewModel.showKeysDialog.collectAsState()
+    val showWalkthrough by viewModel.showWalkthrough.collectAsState()
     val selectedThemeId by viewModel.selectedThemeId.collectAsState()
     val selectedIconId by viewModel.selectedIconId.collectAsState()
 
@@ -124,7 +126,16 @@ fun TerminalScreen(
                     onSaveToken = { viewModel.saveBotToken(it) },
                     onDetectChat = { viewModel.detectChat() },
                     onPickFolderClick = onPickFolderClick,
+                    onOpenGuide = { viewModel.openWalkthroughFromSetup() },
                     onDismiss = { viewModel.dismissOnboarding() }
+                )
+            }
+
+            // Visual Telegram Bot/Group Walkthrough (first run + setup [0])
+            if (showWalkthrough) {
+                SetupWalkthroughDialog(
+                    onContinueToSetup = { viewModel.continueWalkthroughToSetup() },
+                    onDismiss = { viewModel.dismissWalkthrough() }
                 )
             }
 

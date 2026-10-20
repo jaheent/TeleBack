@@ -20,7 +20,12 @@ data class FileEntry(
     val messageId: Long,
     val fileId: String,
     val chunkCount: Int = 1,
-    val chunkParts: List<ChunkPart> = emptyList()
+    val chunkParts: List<ChunkPart> = emptyList(),
+    /**
+     * True when every part was encrypted independently (streamed upload, TeleBack 1.1+).
+     * False/absent for legacy entries, where the whole file was encrypted first and then split.
+     */
+    val chunkEncrypted: Boolean = false
 )
 
 @Serializable

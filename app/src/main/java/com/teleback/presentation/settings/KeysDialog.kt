@@ -6,6 +6,7 @@ import android.content.Context
 import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -21,6 +22,8 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -36,6 +39,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
@@ -62,6 +66,8 @@ fun KeysDialog(
     val context = LocalContext.current
     var inputKey by remember { mutableStateOf("") }
     var passphraseInput by remember { mutableStateOf("") }
+    var confirmInput by remember { mutableStateOf("") }
+    var understood by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var successMessage by remember { mutableStateOf<String?>(null) }
 
@@ -178,6 +184,7 @@ fun KeysDialog(
                     },
                     label = { Text("Enter Memorable Passphrase", fontSize = 11.sp, fontFamily = MonospaceFontFamily) },
                     singleLine = true,
+                    visualTransformation = PasswordVisualTransformation(),
                     modifier = Modifier.fillMaxWidth(),
                     textStyle = TextStyle(color = TerminalTextPrimary, fontSize = 11.sp, fontFamily = MonospaceFontFamily),
                     colors = OutlinedTextFieldDefaults.colors(
@@ -189,18 +196,96 @@ fun KeysDialog(
                 )
 
                 Spacer(modifier = Modifier.height(6.dp))
+                OutlinedTextField(
+                    value = confirmInput,
+                    onValueChange = {
+                        confirmInput = it
+                        errorMessage = null
+                    },
+                    label = { Text("Re-enter Passphrase", fontSize = 11.sp, fontFamily = MonospaceFontFamily) },
+                    singleLine = true,
+                    visualTransformation = PasswordVisualTransformation(),
+                    isError = confirmInput.isNotEmpty() && confirmInput != passphraseInput,
+                    modifier = Modifier.fillMaxWidth(),
+                    textStyle = TextStyle(color = TerminalTextPrimary, fontSize = 11.sp, fontFamily = MonospaceFontFamily),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = TerminalMint,
+                        unfocusedBorderColor = TerminalBorder,
+                        focusedLabelColor = TerminalMint,
+                        unfocusedLabelColor = TerminalTextSecondary
+                    )
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // Red warning banner: a forgotten passphrase means permanently lost backups.
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(4.dp))
+                        .background(TerminalRed.copy(alpha = 0.14f))
+                        .border(1.dp, TerminalRed, RoundedCornerShape(4.dp))
+                        .padding(8.dp)
+                ) {
+                    Text(
+                        text = "Forgetting this passphrase, encrypted backups CANNOT be recovered. No reset and No recovery.",
+                        color = TerminalRed,
+                        fontSize = 11.sp,
+                        lineHeight = 15.sp,
+                        fontFamily = MonospaceFontFamily
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(4.dp))
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { understood = !understood },
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Checkbox(
+                        checked = understood,
+                        onCheckedChange = { understood = it },
+                        colors = CheckboxDefaults.colors(
+                            checkedColor = TerminalRed,
+                            uncheckedColor = TerminalTextSecondary,
+                            checkmarkColor = TerminalBlack
+                        )
+                    )
+                    Text(
+                        text = "Unrecoverable, understood.",
+                        color = TerminalTextPrimary,
+                        fontSize = 11.sp,
+                        fontFamily = MonospaceFontFamily
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = "Setting a new key also means older snapshots made with the previous key can only be restored with that key.",
+                    color = TerminalAmber,
+                    fontSize = 10.sp,
+                    lineHeight = 14.sp,
+                    fontFamily = MonospaceFontFamily
+                )
+
+                Spacer(modifier = Modifier.height(6.dp))
                 Button(
                     onClick = {
                         if (passphraseInput.length < 6) {
                             errorMessage = "Passphrase must be at least 6 characters"
+                        } else if (passphraseInput != confirmInput) {
+                            errorMessage = "Passphrases do not match"
                         } else {
                             val derived = CryptoEngine.deriveKeyFromPassphrase(passphraseInput)
                             onSaveKey(derived)
                             successMessage = "New key derived from passphrase and saved!"
                             passphraseInput = ""
+                            confirmInput = ""
+                            understood = false
                         }
                     },
-                    enabled = passphraseInput.isNotBlank(),
+                    enabled = passphraseInput.isNotBlank() && confirmInput.isNotBlank() && understood,
                     modifier = Modifier.fillMaxWidth(),
                     colors = ButtonDefaults.buttonColors(containerColor = TerminalCyan, contentColor = TerminalBlack)
                 ) {
