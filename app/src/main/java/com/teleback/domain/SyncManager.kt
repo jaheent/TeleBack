@@ -11,6 +11,7 @@ import com.teleback.core.network.ConnectivityObserver
 import com.teleback.core.network.RetryPolicy
 import com.teleback.core.network.TelegramApiClient
 import com.teleback.core.network.TelegramApiException
+import com.teleback.core.network.TelegramMessage
 import com.teleback.core.storage.FileChunker
 import com.teleback.core.storage.ManifestManager
 import com.teleback.core.storage.SafStorageHelper
@@ -270,6 +271,9 @@ class SyncManager(private val context: Context) {
 
             val scanResult = safHelper.scanDirectory(folderUri)
 
+            val previousManifestMessageId = db.snapshotDao().getLatestSnapshot()?.manifestMessageId
+                ?: client.getChat(chatId).getOrNull()?.pinnedMessage?.messageId
+
             val manifest = SnapshotManifest(
                 version = 1,
                 snapshotId = snapshotId,
@@ -281,6 +285,7 @@ class SyncManager(private val context: Context) {
                 totalBytes = uploadedFileEntries.sumOf { it.size },
                 isEncrypted = isEncrypted,
                 directories = scanResult.directories,
+                previousManifestMessageId = previousManifestMessageId,
                 files = uploadedFileEntries
             )
 
@@ -593,6 +598,197 @@ class SyncManager(private val context: Context) {
             // 3. Delete from local database
             db.snapshotDao().deleteSnapshot(oldSnap.snapshotId)
             onLog(TerminalLog(level = LogLevel.OK, message = "Pruned [${oldSnap.snapshotId}]: manifest & $deletedOrphanCount orphaned cloud files removed."))
+        }
+    }
+
+    suspend fun scanCloudSnapshots(
+        onLog: ((TerminalLog) -> Unit)? = null
+    ): Result<List<SnapshotEntity>> = withContext(Dispatchers.IO) {
+        runCatching {
+            val client = getApiClient() ?: throw IllegalStateException("Bot token missing.")
+            val chatId = prefs.chatId.first() ?: throw IllegalStateException("Chat ID not configured.")
+            val masterKey = prefs.getOrGenerateMasterKey()
+
+            onLog?.invoke(TerminalLog(level = LogLevel.INFO, message = "Scanning Telegram Cloud for snapshots..."))
+            val chat = client.getChat(chatId).getOrThrow()
+            var currentMsg: TelegramMessage? = chat.pinnedMessage
+            var currentMsgId: Long? = currentMsg?.messageId
+            val visitedMsgIds = mutableSetOf<Long>()
+            var discoveredCount = 0
+
+            while (currentMsgId != null && visitedMsgIds.add(currentMsgId)) {
+                val doc = currentMsg?.document
+                val caption = currentMsg?.caption.orEmpty()
+                if (doc != null && (doc.fileName?.startsWith("manifest_") == true || caption.contains(ManifestManager.MANIFEST_TAG))) {
+                    val fileInfo = client.getFile(doc.fileId).getOrNull()
+                    if (fileInfo?.filePath != null) {
+                        val bytes = client.downloadFileBytes(fileInfo.filePath).getOrNull()
+                        if (bytes != null) {
+                            val manifestResult = runCatching { ManifestManager.deserializeManifest(bytes, masterKey) }
+                            val manifest = manifestResult.getOrNull()
+                            if (manifest != null) {
+                                db.snapshotDao().insertSnapshot(
+                                    SnapshotEntity(
+                                        snapshotId = manifest.snapshotId,
+                                        tag = manifest.tag,
+                                        timestamp = manifest.timestamp,
+                                        rootFolderName = manifest.rootFolderName,
+                                        totalFiles = manifest.totalFiles,
+                                        totalBytes = manifest.totalBytes,
+                                        isEncrypted = manifest.isEncrypted,
+                                        manifestMessageId = currentMsgId,
+                                        manifestFileId = doc.fileId,
+                                        rawJson = ManifestManager.json.encodeToString(manifest)
+                                    )
+                                )
+                                discoveredCount++
+                                onLog?.invoke(TerminalLog(level = LogLevel.SNAP, message = "Discovered snapshot [${manifest.snapshotId}] (${manifest.totalFiles} files)"))
+
+                                val prevId = manifest.previousManifestMessageId
+                                if (prevId != null && !visitedMsgIds.contains(prevId)) {
+                                    val fwd = client.forwardMessage(chatId, chatId, prevId).getOrNull()
+                                    if (fwd != null) {
+                                        client.deleteMessage(chatId, fwd.messageId)
+                                        currentMsg = fwd
+                                        currentMsgId = prevId
+                                        continue
+                                    }
+                                }
+                            } else {
+                                val err = manifestResult.exceptionOrNull()?.message ?: "Decryption or parse error"
+                                onLog?.invoke(TerminalLog(level = LogLevel.WARN, message = "Manifest at msg #$currentMsgId skipped: $err"))
+                            }
+                        }
+                    }
+                }
+                break
+            }
+            onLog?.invoke(TerminalLog(level = LogLevel.OK, message = "Scan complete. Discovered $discoveredCount remote snapshots."))
+            db.snapshotDao().getAllSnapshotsDirect()
+        }
+    }
+
+    suspend fun deleteCloudSnapshots(
+        snapshotIds: List<String>,
+        onLog: (TerminalLog) -> Unit
+    ): Result<Int> = withContext(Dispatchers.IO) {
+        runCatching {
+            val client = getApiClient() ?: throw IllegalStateException("Bot token missing.")
+            val chatId = prefs.chatId.first() ?: throw IllegalStateException("Chat ID not configured.")
+            val allSnapshots = db.snapshotDao().getAllSnapshotsDirect()
+            val targetSnapshots = allSnapshots.filter { it.snapshotId in snapshotIds }
+            val remainingSnapshots = allSnapshots.filter { it.snapshotId !in snapshotIds }
+
+            val activeMessageIds = mutableSetOf<Long>()
+            for (snap in remainingSnapshots) {
+                activeMessageIds.add(snap.manifestMessageId)
+                val m = runCatching { ManifestManager.json.decodeFromString<SnapshotManifest>(snap.rawJson) }.getOrNull()
+                if (m != null) {
+                    for (file in m.files) {
+                        activeMessageIds.add(file.messageId)
+                        for (chunk in file.chunkParts) {
+                            activeMessageIds.add(chunk.messageId)
+                        }
+                    }
+                }
+            }
+
+            var deletedFilesCount = 0
+            for (snap in targetSnapshots) {
+                onLog(TerminalLog(level = LogLevel.WARN, message = "Deleting cloud snapshot [${snap.snapshotId}]..."))
+                // Delete manifest message
+                client.deleteMessage(chatId, snap.manifestMessageId)
+
+                // Delete orphaned chunks
+                val m = runCatching { ManifestManager.json.decodeFromString<SnapshotManifest>(snap.rawJson) }.getOrNull()
+                if (m != null) {
+                    for (file in m.files) {
+                        if (!activeMessageIds.contains(file.messageId)) {
+                            client.deleteMessage(chatId, file.messageId)
+                            deletedFilesCount++
+                        }
+                        for (chunk in file.chunkParts) {
+                            if (!activeMessageIds.contains(chunk.messageId)) {
+                                client.deleteMessage(chatId, chunk.messageId)
+                                deletedFilesCount++
+                            }
+                        }
+                    }
+                }
+                // Delete from DB
+                db.snapshotDao().deleteSnapshot(snap.snapshotId)
+            }
+
+            // Update pinned message: if pinned was one of target, pin the latest remaining snapshot if any
+            val chat = client.getChat(chatId).getOrNull()
+            val pinnedId = chat?.pinnedMessage?.messageId
+            if (pinnedId != null && targetSnapshots.any { it.manifestMessageId == pinnedId }) {
+                client.unpinChatMessage(chatId, pinnedId)
+                if (remainingSnapshots.isNotEmpty()) {
+                    client.pinChatMessage(chatId, remainingSnapshots.first().manifestMessageId)
+                }
+            }
+
+            onLog(TerminalLog(level = LogLevel.OK, message = "Deleted ${targetSnapshots.size} snapshots ($deletedFilesCount cloud files removed)."))
+            targetSnapshots.size
+        }
+    }
+
+    suspend fun wipeAllCloudVault(
+        onLog: (TerminalLog) -> Unit
+    ): Result<Int> = withContext(Dispatchers.IO) {
+        runCatching {
+            val client = getApiClient() ?: throw IllegalStateException("Bot token missing.")
+            val chatId = prefs.chatId.first() ?: throw IllegalStateException("Chat ID not configured.")
+            val allSnapshots = db.snapshotDao().getAllSnapshotsDirect()
+
+            onLog(TerminalLog(level = LogLevel.WARN, message = "Wiping entire cloud vault (${allSnapshots.size} snapshots)..."))
+
+            // Unpin chat message if any
+            val chat = client.getChat(chatId).getOrNull()
+            chat?.pinnedMessage?.messageId?.let { pinnedId ->
+                client.unpinChatMessage(chatId, pinnedId)
+            }
+
+            var deletedCount = 0
+            val deletedMsgIds = mutableSetOf<Long>()
+            for (snap in allSnapshots) {
+                if (deletedMsgIds.add(snap.manifestMessageId)) {
+                    client.deleteMessage(chatId, snap.manifestMessageId)
+                    deletedCount++
+                }
+                val m = runCatching { ManifestManager.json.decodeFromString<SnapshotManifest>(snap.rawJson) }.getOrNull()
+                if (m != null) {
+                    for (file in m.files) {
+                        if (deletedMsgIds.add(file.messageId)) {
+                            client.deleteMessage(chatId, file.messageId)
+                            deletedCount++
+                        }
+                        for (chunk in file.chunkParts) {
+                            if (deletedMsgIds.add(chunk.messageId)) {
+                                client.deleteMessage(chatId, chunk.messageId)
+                                deletedCount++
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Also clean any pending uploads messages
+            val pending = db.pendingUploadDao().all()
+            for (p in pending) {
+                if (p.messageId > 0 && deletedMsgIds.add(p.messageId)) {
+                    client.deleteMessage(chatId, p.messageId)
+                    deletedCount++
+                }
+            }
+
+            // Wipe database entries
+            db.snapshotDao().deleteAllSnapshots()
+            db.pendingUploadDao().clearAll()
+
+            onLog(TerminalLog(level = LogLevel.OK, message = "Cloud vault wiped. $deletedCount messages permanently deleted from Telegram."))
+            deletedCount
         }
     }
 

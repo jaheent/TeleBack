@@ -20,6 +20,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.teleback.presentation.cloud.CloudManagerDialog
 import com.teleback.presentation.customization.CustomizationDialog
 import com.teleback.presentation.onboarding.OnboardingDialog
 import com.teleback.presentation.onboarding.SetupWalkthroughDialog
@@ -48,6 +49,7 @@ fun TerminalScreen(
     val showWelcome by viewModel.showWelcome.collectAsState()
     val showOnboarding by viewModel.showOnboarding.collectAsState()
     val showSnapshotPicker by viewModel.showSnapshotPicker.collectAsState()
+    val showCloudManager by viewModel.showCloudManager.collectAsState()
     val showCustomization by viewModel.showCustomization.collectAsState()
     val showKeysDialog by viewModel.showKeysDialog.collectAsState()
     val showWalkthrough by viewModel.showWalkthrough.collectAsState()
@@ -126,6 +128,9 @@ fun TerminalScreen(
                     onSaveToken = { viewModel.saveBotToken(it) },
                     onDetectChat = { viewModel.detectChat() },
                     onPickFolderClick = onPickFolderClick,
+                    onCompleteSetup = { derivedKey, isExistingVault ->
+                        viewModel.finishOnboarding(derivedKey, isExistingVault)
+                    },
                     onOpenGuide = { viewModel.openWalkthroughFromSetup() },
                     onDismiss = { viewModel.dismissOnboarding() }
                 )
@@ -147,6 +152,20 @@ fun TerminalScreen(
                         viewModel.runRestore(snapId)
                     },
                     onDismiss = { viewModel.dismissSnapshotPicker() }
+                )
+            }
+
+            // Cloud Snapshot Manager Dialog [4]
+            if (showCloudManager) {
+                CloudManagerDialog(
+                    snapshots = snapshots,
+                    isScanning = isBusy,
+                    onScanCloud = { viewModel.scanCloudSnapshots() },
+                    onDeleteSelected = { selectedIds ->
+                        viewModel.deleteCloudSnapshots(selectedIds)
+                    },
+                    onWipeAll = { viewModel.wipeCloudVault() },
+                    onDismiss = { viewModel.dismissCloudManager() }
                 )
             }
 

@@ -10,7 +10,7 @@ class CliCommandTest {
         assertEquals(CliCommand.SYNC, CliCommand.resolve("1"))
         assertEquals(CliCommand.BACKUP, CliCommand.resolve("2"))
         assertEquals(CliCommand.RESTORE, CliCommand.resolve("3"))
-        assertEquals(CliCommand.SNAPSHOT, CliCommand.resolve("4"))
+        assertEquals(CliCommand.CLOUD, CliCommand.resolve("4"))
         assertEquals(CliCommand.STATUS, CliCommand.resolve("5"))
         assertEquals(CliCommand.TEST, CliCommand.resolve("6"))
         assertEquals(CliCommand.CUSTOM, CliCommand.resolve("7"))
@@ -26,6 +26,8 @@ class CliCommandTest {
         assertEquals(CliCommand.BACKUP, CliCommand.resolve("push"))
         assertEquals(CliCommand.RESTORE, CliCommand.resolve("restore"))
         assertEquals(CliCommand.RESTORE, CliCommand.resolve("pull"))
+        assertEquals(CliCommand.CLOUD, CliCommand.resolve("cloud"))
+        assertEquals(CliCommand.CLOUD, CliCommand.resolve("snaps"))
         assertEquals(CliCommand.STATUS, CliCommand.resolve("diff"))
         assertEquals(CliCommand.TEST, CliCommand.resolve("ping"))
         assertEquals(CliCommand.CUSTOM, CliCommand.resolve("custom"))
@@ -39,6 +41,6 @@ class CliCommandTest {
     @Test
     fun testNumericWithArguments() {
         assertEquals(CliCommand.SYNC, CliCommand.resolve("1 --dry-run"))
-        assertEquals(CliCommand.SNAPSHOT, CliCommand.resolve("4 -m \"Release 1.0\""))
+        assertEquals(CliCommand.CLOUD, CliCommand.resolve("4"))
     }
 }

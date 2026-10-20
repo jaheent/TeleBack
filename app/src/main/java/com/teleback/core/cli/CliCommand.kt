@@ -32,13 +32,13 @@ enum class CliCommand(
         description = "Browse & download snapshot",
         usage = "3  or  restore [snapshot_id]"
     ),
-    SNAPSHOT(
+    CLOUD(
         number = 4,
-        commandName = "snapshot",
-        aliases = listOf("snap", "tag"),
-        shortLabel = "Tagged version",
-        description = "Create tagged version point",
-        usage = "4  or  snapshot -m \"Label\""
+        commandName = "cloud",
+        aliases = listOf("snaps", "snapshots", "manage", "vault"),
+        shortLabel = "Manage cloud",
+        description = "View, select & delete cloud snapshots",
+        usage = "4  or  cloud"
     ),
     STATUS(
         number = 5,

@@ -40,5 +40,6 @@ data class SnapshotManifest(
     val totalBytes: Long,
     val isEncrypted: Boolean = true,
     val directories: List<String> = emptyList(),
+    val previousManifestMessageId: Long? = null,
     val files: List<FileEntry>
 )

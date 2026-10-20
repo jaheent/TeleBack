@@ -22,7 +22,9 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CheckboxDefaults
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
@@ -38,21 +40,18 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import com.teleback.core.crypto.CryptoEngine
 import com.teleback.presentation.theme.MonospaceFontFamily
 import com.teleback.presentation.theme.TerminalAmber
 import com.teleback.presentation.theme.TerminalBlack
-import com.teleback.presentation.theme.TerminalBorder
 import com.teleback.presentation.theme.TerminalCyan
-import com.teleback.presentation.theme.TerminalDark
 import com.teleback.presentation.theme.TerminalMint
 import com.teleback.presentation.theme.TerminalRed
-import com.teleback.presentation.theme.TerminalSurface
-import com.teleback.presentation.theme.TerminalTextMuted
-import com.teleback.presentation.theme.TerminalTextPrimary
-import com.teleback.presentation.theme.TerminalTextSecondary
 
 @Composable
 fun OnboardingDialog(
@@ -63,6 +62,7 @@ fun OnboardingDialog(
     onSaveToken: (String) -> Unit,
     onDetectChat: () -> Unit,
     onPickFolderClick: () -> Unit,
+    onCompleteSetup: (derivedKey: String?, isExistingVault: Boolean) -> Unit,
     onOpenGuide: () -> Unit,
     onDismiss: () -> Unit
 ) {
@@ -70,13 +70,20 @@ fun OnboardingDialog(
     var step by remember { mutableIntStateOf(1) }
     var tokenInput by remember { mutableStateOf(initialBotToken ?: "") }
 
+    // Step 3 states
+    var isNewVault by remember { mutableStateOf(true) }
+    var passphraseInput by remember { mutableStateOf("") }
+    var confirmPassphraseInput by remember { mutableStateOf("") }
+    var unrecoverableUnderstood by remember { mutableStateOf(false) }
+    var step3Error by remember { mutableStateOf<String?>(null) }
+
     Dialog(onDismissRequest = onDismiss) {
         Card(
             modifier = Modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(8.dp))
-                .border(1.dp, TerminalMint, RoundedCornerShape(8.dp)),
-            colors = CardDefaults.cardColors(containerColor = TerminalDark)
+                .border(1.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(8.dp)),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
         ) {
             Column(
                 modifier = Modifier
@@ -91,19 +98,20 @@ fun OnboardingDialog(
                 ) {
                     Text(
                         text = "TELEBACK // SETUP WIZARD",
-                        color = TerminalMint,
-                        fontSize = 14.sp,
+                        color = MaterialTheme.colorScheme.primary,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
                         fontFamily = MonospaceFontFamily
                     )
                     Text(
                         text = "STEP $step OF 3",
-                        color = TerminalTextMuted,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                         fontSize = 11.sp,
                         fontFamily = MonospaceFontFamily
                     )
                 }
 
-                Spacer(modifier = Modifier.height(6.dp))
+                Spacer(modifier = Modifier.height(4.dp))
                 Text(
                     text = "Need help? Open the visual guide",
                     color = TerminalCyan,
@@ -124,8 +132,8 @@ fun OnboardingDialog(
                         )
                         Spacer(modifier = Modifier.height(6.dp))
                         Text(
-                            text = "TeleBack stores your files in a private Telegram Group using a custom bot. No TeleBack account or phone registration is required in the app.",
-                            color = TerminalTextSecondary,
+                            text = "TeleBack stores your files encrypted in a private Telegram Group using your own bot. No third-party servers.",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                             fontSize = 11.sp,
                             lineHeight = 15.sp,
                             fontFamily = MonospaceFontFamily
@@ -150,12 +158,12 @@ fun OnboardingDialog(
                             label = { Text("Paste HTTP API Token", fontSize = 11.sp, fontFamily = MonospaceFontFamily) },
                             singleLine = true,
                             modifier = Modifier.fillMaxWidth(),
-                            textStyle = TextStyle(color = TerminalTextPrimary, fontSize = 11.sp, fontFamily = MonospaceFontFamily),
+                            textStyle = TextStyle(color = MaterialTheme.colorScheme.onSurface, fontSize = 11.sp, fontFamily = MonospaceFontFamily),
                             colors = OutlinedTextFieldDefaults.colors(
-                                focusedBorderColor = TerminalMint,
-                                unfocusedBorderColor = TerminalBorder,
-                                focusedLabelColor = TerminalMint,
-                                unfocusedLabelColor = TerminalTextSecondary
+                                focusedBorderColor = MaterialTheme.colorScheme.primary,
+                                unfocusedBorderColor = MaterialTheme.colorScheme.outline,
+                                focusedLabelColor = MaterialTheme.colorScheme.primary,
+                                unfocusedLabelColor = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         )
 
@@ -169,9 +177,9 @@ fun OnboardingDialog(
                             },
                             enabled = tokenInput.isNotBlank(),
                             modifier = Modifier.fillMaxWidth(),
-                            colors = ButtonDefaults.buttonColors(containerColor = TerminalMint, contentColor = TerminalBlack)
+                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary, contentColor = MaterialTheme.colorScheme.surface)
                         ) {
-                            Text("Save & Next ->", fontFamily = MonospaceFontFamily)
+                            Text("Save & Next ->", fontFamily = MonospaceFontFamily, fontWeight = FontWeight.Bold)
                         }
                     }
 
@@ -184,8 +192,8 @@ fun OnboardingDialog(
                         )
                         Spacer(modifier = Modifier.height(6.dp))
                         Text(
-                            text = "1. Create a private Telegram Group or Channel.\n2. Add your bot as Administrator.\n3. Send any message in that group.\n4. Tap 'Auto-Detect Chat ID' below.",
-                            color = TerminalTextSecondary,
+                            text = "1. Create a private Telegram Group.\n2. Add your bot as Administrator.\n3. Send any message in that group.\n4. Tap 'Auto-Detect Chat ID' below.",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                             fontSize = 11.sp,
                             lineHeight = 16.sp,
                             fontFamily = MonospaceFontFamily
@@ -197,13 +205,13 @@ fun OnboardingDialog(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .clip(RoundedCornerShape(4.dp))
-                                    .background(TerminalSurface)
-                                    .border(1.dp, TerminalMint, RoundedCornerShape(4.dp))
+                                    .background(MaterialTheme.colorScheme.surfaceVariant)
+                                    .border(1.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(4.dp))
                                     .padding(10.dp)
                             ) {
                                 Text(
                                     text = "Linked Group: $initialChatTitle",
-                                    color = TerminalMint,
+                                    color = MaterialTheme.colorScheme.primary,
                                     fontSize = 12.sp,
                                     fontFamily = MonospaceFontFamily
                                 )
@@ -225,71 +233,226 @@ fun OnboardingDialog(
                             OutlinedButton(
                                 onClick = { step = 1 },
                                 modifier = Modifier.weight(1f),
-                                border = androidx.compose.foundation.BorderStroke(1.dp, TerminalBorder),
-                                colors = ButtonDefaults.outlinedButtonColors(contentColor = TerminalTextSecondary)
+                                border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+                                colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.onSurfaceVariant)
                             ) {
                                 Text("<- Back", fontFamily = MonospaceFontFamily)
                             }
                             Button(
                                 onClick = { step = 3 },
                                 modifier = Modifier.weight(1f),
-                                colors = ButtonDefaults.buttonColors(containerColor = TerminalMint, contentColor = TerminalBlack)
+                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary, contentColor = MaterialTheme.colorScheme.surface)
                             ) {
-                                Text("Next ->", fontFamily = MonospaceFontFamily)
+                                Text("Next ->", fontFamily = MonospaceFontFamily, fontWeight = FontWeight.Bold)
                             }
                         }
                     }
 
                     3 -> {
                         Text(
-                            text = "3. Target Folder & Security",
+                            text = "3. Security & Target Folder",
                             color = TerminalCyan,
                             fontSize = 13.sp,
                             fontFamily = MonospaceFontFamily
                         )
-                        Spacer(modifier = Modifier.height(6.dp))
-                        Text(
-                            text = "Choose the local folder on your Android device to backup/sync (Documents, Notes, etc.) via Storage Access Framework.",
-                            color = TerminalTextSecondary,
-                            fontSize = 11.sp,
-                            lineHeight = 15.sp,
-                            fontFamily = MonospaceFontFamily
-                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        // Vault Mode Selector
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Button(
+                                onClick = { isNewVault = true; step3Error = null },
+                                modifier = Modifier.weight(1f),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = if (isNewVault) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
+                                    contentColor = if (isNewVault) MaterialTheme.colorScheme.surface else MaterialTheme.colorScheme.onSurface
+                                )
+                            ) {
+                                Text("New Vault", fontSize = 11.sp, fontFamily = MonospaceFontFamily)
+                            }
+                            Button(
+                                onClick = { isNewVault = false; step3Error = null },
+                                modifier = Modifier.weight(1f),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = if (!isNewVault) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
+                                    contentColor = if (!isNewVault) MaterialTheme.colorScheme.surface else MaterialTheme.colorScheme.onSurface
+                                )
+                            ) {
+                                Text("Existing Vault", fontSize = 11.sp, fontFamily = MonospaceFontFamily)
+                            }
+                        }
 
                         Spacer(modifier = Modifier.height(10.dp))
-                        OutlinedButton(
-                            onClick = onPickFolderClick,
-                            modifier = Modifier.fillMaxWidth(),
-                            colors = ButtonDefaults.outlinedButtonColors(contentColor = TerminalMint),
-                            border = androidx.compose.foundation.BorderStroke(1.dp, TerminalMint)
-                        ) {
+
+                        if (isNewVault) {
                             Text(
-                                text = if (initialFolderName != null) "Folder: $initialFolderName" else "Select Target Folder",
+                                text = "Create a memorable Master Passphrase to encrypt your files.",
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontSize = 10.sp,
                                 fontFamily = MonospaceFontFamily
+                            )
+                            Spacer(modifier = Modifier.height(6.dp))
+
+                            OutlinedTextField(
+                                value = passphraseInput,
+                                onValueChange = { passphraseInput = it; step3Error = null },
+                                label = { Text("Set Master Passphrase", fontSize = 11.sp, fontFamily = MonospaceFontFamily) },
+                                singleLine = true,
+                                visualTransformation = PasswordVisualTransformation(),
+                                modifier = Modifier.fillMaxWidth(),
+                                textStyle = TextStyle(color = MaterialTheme.colorScheme.onSurface, fontSize = 11.sp, fontFamily = MonospaceFontFamily),
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedBorderColor = MaterialTheme.colorScheme.primary,
+                                    unfocusedBorderColor = MaterialTheme.colorScheme.outline
+                                )
+                            )
+
+                            Spacer(modifier = Modifier.height(6.dp))
+
+                            OutlinedTextField(
+                                value = confirmPassphraseInput,
+                                onValueChange = { confirmPassphraseInput = it; step3Error = null },
+                                label = { Text("Confirm Master Passphrase", fontSize = 11.sp, fontFamily = MonospaceFontFamily) },
+                                singleLine = true,
+                                visualTransformation = PasswordVisualTransformation(),
+                                modifier = Modifier.fillMaxWidth(),
+                                textStyle = TextStyle(color = MaterialTheme.colorScheme.onSurface, fontSize = 11.sp, fontFamily = MonospaceFontFamily),
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedBorderColor = MaterialTheme.colorScheme.primary,
+                                    unfocusedBorderColor = MaterialTheme.colorScheme.outline
+                                )
+                            )
+
+                            Spacer(modifier = Modifier.height(8.dp))
+
+                            // Warning Banner
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(4.dp))
+                                    .background(TerminalRed.copy(alpha = 0.15f))
+                                    .border(1.dp, TerminalRed, RoundedCornerShape(4.dp))
+                                    .padding(8.dp)
+                            ) {
+                                Text(
+                                    text = "Forgetting this passphrase, encrypted backups CANNOT be recovered. No reset and No recovery.",
+                                    color = TerminalRed,
+                                    fontSize = 10.sp,
+                                    lineHeight = 14.sp,
+                                    fontFamily = MonospaceFontFamily
+                                )
+                            }
+
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { unrecoverableUnderstood = !unrecoverableUnderstood },
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Checkbox(
+                                    checked = unrecoverableUnderstood,
+                                    onCheckedChange = { unrecoverableUnderstood = it },
+                                    colors = CheckboxDefaults.colors(
+                                        checkedColor = TerminalRed,
+                                        uncheckedColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        checkmarkColor = TerminalBlack
+                                    )
+                                )
+                                Text(
+                                    text = "Unrecoverable, understood.",
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    fontSize = 11.sp,
+                                    fontFamily = MonospaceFontFamily
+                                )
+                            }
+                        } else {
+                            Text(
+                                text = "Enter your vault passphrase from your previous phone or setup. TeleBack will decrypt and restore your cloud snapshots.",
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontSize = 10.sp,
+                                lineHeight = 14.sp,
+                                fontFamily = MonospaceFontFamily
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+
+                            OutlinedTextField(
+                                value = passphraseInput,
+                                onValueChange = { passphraseInput = it; step3Error = null },
+                                label = { Text("Enter Vault Passphrase", fontSize = 11.sp, fontFamily = MonospaceFontFamily) },
+                                singleLine = true,
+                                visualTransformation = PasswordVisualTransformation(),
+                                modifier = Modifier.fillMaxWidth(),
+                                textStyle = TextStyle(color = MaterialTheme.colorScheme.onSurface, fontSize = 11.sp, fontFamily = MonospaceFontFamily),
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedBorderColor = MaterialTheme.colorScheme.primary,
+                                    unfocusedBorderColor = MaterialTheme.colorScheme.outline
+                                )
                             )
                         }
 
-                        Spacer(modifier = Modifier.height(12.dp))
-                        Text(
-                            text = "AES-256-GCM Master Key: ENABLED",
-                            color = TerminalMint,
-                            fontSize = 11.sp,
-                            fontFamily = MonospaceFontFamily
-                        )
-                        Text(
-                            text = "Files are encrypted on-device before uploading.",
-                            color = TerminalTextMuted,
-                            fontSize = 10.sp,
-                            fontFamily = MonospaceFontFamily
-                        )
+                        Spacer(modifier = Modifier.height(10.dp))
 
-                        Spacer(modifier = Modifier.height(16.dp))
-                        Button(
-                            onClick = onDismiss,
+                        // Target folder picker
+                        OutlinedButton(
+                            onClick = onPickFolderClick,
                             modifier = Modifier.fillMaxWidth(),
-                            colors = ButtonDefaults.buttonColors(containerColor = TerminalMint, contentColor = TerminalBlack)
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.primary),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.primary)
                         ) {
-                            Text("Complete Setup", fontFamily = MonospaceFontFamily)
+                            Text(
+                                text = if (initialFolderName != null) "Folder: $initialFolderName" else "Select Target Folder (SAF)",
+                                fontFamily = MonospaceFontFamily,
+                                fontSize = 11.sp
+                            )
+                        }
+
+                        if (step3Error != null) {
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Text(text = step3Error!!, color = TerminalRed, fontSize = 10.sp, fontFamily = MonospaceFontFamily)
+                        }
+
+                        Spacer(modifier = Modifier.height(14.dp))
+
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            OutlinedButton(
+                                onClick = { step = 2 },
+                                modifier = Modifier.weight(1f),
+                                border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+                                colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.onSurfaceVariant)
+                            ) {
+                                Text("<- Back", fontFamily = MonospaceFontFamily)
+                            }
+                            Button(
+                                onClick = {
+                                    if (isNewVault) {
+                                        if (passphraseInput.length < 6) {
+                                            step3Error = "Passphrase must be at least 6 characters"
+                                            return@Button
+                                        }
+                                        if (passphraseInput != confirmPassphraseInput) {
+                                            step3Error = "Passphrases do not match"
+                                            return@Button
+                                        }
+                                        if (!unrecoverableUnderstood) {
+                                            step3Error = "Please check 'Unrecoverable, understood.'"
+                                            return@Button
+                                        }
+                                        val derived = CryptoEngine.deriveKeyFromPassphrase(passphraseInput)
+                                        onCompleteSetup(derived, false)
+                                    } else {
+                                        if (passphraseInput.isBlank()) {
+                                            step3Error = "Please enter your vault passphrase"
+                                            return@Button
+                                        }
+                                        val derived = CryptoEngine.deriveKeyFromPassphrase(passphraseInput.trim())
+                                        onCompleteSetup(derived, true)
+                                    }
+                                },
+                                modifier = Modifier.weight(1f),
+                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary, contentColor = MaterialTheme.colorScheme.surface)
+                            ) {
+                                Text("Complete Setup", fontFamily = MonospaceFontFamily, fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                            }
                         }
                     }
                 }

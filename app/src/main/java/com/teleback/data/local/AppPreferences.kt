@@ -35,7 +35,7 @@ class AppPreferences(private val context: Context) {
 
     val hasSeenWelcome: Flow<Boolean> = context.dataStore.data.map { it[KEY_HAS_SEEN_WELCOME] ?: false }
     val selectedThemeId: Flow<String> = context.dataStore.data.map { it[KEY_THEME_ID] ?: "matrix_mint" }
-    val selectedIconId: Flow<String> = context.dataStore.data.map { it[KEY_ACTIVE_ICON_ID] ?: "icon_a" }
+    val selectedIconId: Flow<String> = context.dataStore.data.map { it[KEY_ACTIVE_ICON_ID] ?: "icon_b" }
     val botToken: Flow<String?> = context.dataStore.data.map { it[KEY_BOT_TOKEN] }
     val chatId: Flow<Long?> = context.dataStore.data.map { it[KEY_CHAT_ID] }
     val chatTitle: Flow<String?> = context.dataStore.data.map { it[KEY_CHAT_TITLE] }

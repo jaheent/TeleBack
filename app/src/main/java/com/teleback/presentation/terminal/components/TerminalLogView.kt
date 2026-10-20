@@ -16,6 +16,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -24,13 +25,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.teleback.core.cli.LogLevel
 import com.teleback.core.cli.TerminalLog
-import com.teleback.presentation.theme.TerminalBlack
-import com.teleback.presentation.theme.TerminalBorder
-import com.teleback.presentation.theme.TerminalMint
-import com.teleback.presentation.theme.TerminalSurface
-import com.teleback.presentation.theme.TerminalTextMuted
-import com.teleback.presentation.theme.TerminalTextPrimary
 
 @Composable
 fun TerminalLogView(
@@ -38,6 +34,7 @@ fun TerminalLogView(
     modifier: Modifier = Modifier
 ) {
     val listState = rememberLazyListState()
+    val colorScheme = MaterialTheme.colorScheme
 
     LaunchedEffect(logs.size) {
         if (logs.isNotEmpty()) {
@@ -49,8 +46,8 @@ fun TerminalLogView(
         modifier = modifier
             .fillMaxSize()
             .clip(RoundedCornerShape(6.dp))
-            .background(TerminalBlack)
-            .border(1.dp, TerminalBorder, RoundedCornerShape(6.dp))
+            .background(colorScheme.surface)
+            .border(1.dp, colorScheme.outline, RoundedCornerShape(6.dp))
             .padding(8.dp)
     ) {
         LazyColumn(
@@ -66,6 +63,14 @@ fun TerminalLogView(
 
 @Composable
 private fun LogItemRow(log: TerminalLog) {
+    val colorScheme = MaterialTheme.colorScheme
+    val tagColor = when (log.level) {
+        LogLevel.OK, LogLevel.CMD -> colorScheme.primary
+        LogLevel.INFO, LogLevel.SYNC -> colorScheme.secondary
+        LogLevel.SNAP -> colorScheme.secondary
+        else -> log.level.color
+    }
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -77,19 +82,19 @@ private fun LogItemRow(log: TerminalLog) {
         ) {
             Text(
                 text = log.formattedTime,
-                color = TerminalTextMuted,
+                color = colorScheme.onSurfaceVariant,
                 fontSize = 11.sp
             )
             Spacer(modifier = Modifier.width(6.dp))
             Text(
                 text = log.level.tag,
-                color = log.level.color,
+                color = tagColor,
                 fontSize = 11.sp
             )
             Spacer(modifier = Modifier.width(6.dp))
             Text(
                 text = log.message,
-                color = TerminalTextPrimary,
+                color = colorScheme.onSurface,
                 fontSize = 11.sp,
                 lineHeight = 15.sp,
                 modifier = Modifier.weight(1f)
@@ -104,8 +109,8 @@ private fun LogItemRow(log: TerminalLog) {
                     .fillMaxWidth()
                     .height(3.dp)
                     .clip(RoundedCornerShape(2.dp)),
-                color = TerminalMint,
-                trackColor = TerminalSurface
+                color = colorScheme.primary,
+                trackColor = colorScheme.surfaceVariant
             )
         }
     }

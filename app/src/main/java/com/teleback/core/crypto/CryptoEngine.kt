@@ -65,6 +65,14 @@ object CryptoEngine {
         return result
     }
 
+    fun isEncrypted(data: ByteArray): Boolean {
+        if (data.size < HEADER_MAGIC.size) return false
+        for (i in HEADER_MAGIC.indices) {
+            if (data[i] != HEADER_MAGIC[i]) return false
+        }
+        return true
+    }
+
     fun decryptBytes(data: ByteArray, keyBase64: String): ByteArray {
         if (data.size < HEADER_MAGIC.size + GCM_IV_LENGTH) {
             throw IllegalArgumentException("Data is too short to be an encrypted TeleBack payload")

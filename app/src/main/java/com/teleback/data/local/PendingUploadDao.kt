@@ -21,4 +21,7 @@ interface PendingUploadDao {
 
     @Query("DELETE FROM pending_uploads WHERE fileSha256 = :sha AND chunkIndex = :chunkIndex")
     suspend fun delete(sha: String, chunkIndex: Int)
+
+    @Query("DELETE FROM pending_uploads")
+    suspend fun clearAll()
 }

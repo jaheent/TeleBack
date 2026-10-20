@@ -8,6 +8,7 @@ import com.teleback.core.cli.LogLevel
 import com.teleback.core.cli.TerminalLog
 import com.teleback.core.network.ConnectivityObserver
 import com.teleback.core.service.SyncForegroundService
+import com.teleback.core.util.NotificationHelper
 import com.teleback.core.util.SizeFormat
 import com.teleback.data.local.AppDatabase
 import com.teleback.data.local.AppPreferences
@@ -38,8 +39,8 @@ class TerminalViewModel(application: Application) : AndroidViewModel(application
     val masterKey = prefs.masterKey.stateIn(viewModelScope, SharingStarted.Eagerly, "")
     val snapshots = db.snapshotDao().getAllSnapshots().stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
-    val selectedThemeId = prefs.selectedThemeId.stateIn(viewModelScope, SharingStarted.Eagerly, "matrix_mint")
-    val selectedIconId = prefs.selectedIconId.stateIn(viewModelScope, SharingStarted.Eagerly, "icon_a")
+    val selectedThemeId = prefs.selectedThemeId.stateIn(viewModelScope, SharingStarted.Eagerly, "dark_green")
+    val selectedIconId = prefs.selectedIconId.stateIn(viewModelScope, SharingStarted.Eagerly, "icon_b")
 
     private val _logs = MutableStateFlow<List<TerminalLog>>(emptyList())
     val logs: StateFlow<List<TerminalLog>> = _logs.asStateFlow()
@@ -55,6 +56,9 @@ class TerminalViewModel(application: Application) : AndroidViewModel(application
 
     private val _showSnapshotPicker = MutableStateFlow(false)
     val showSnapshotPicker: StateFlow<Boolean> = _showSnapshotPicker.asStateFlow()
+
+    private val _showCloudManager = MutableStateFlow(false)
+    val showCloudManager: StateFlow<Boolean> = _showCloudManager.asStateFlow()
 
     private val _showCustomization = MutableStateFlow(false)
     val showCustomization: StateFlow<Boolean> = _showCustomization.asStateFlow()
@@ -143,9 +147,8 @@ class TerminalViewModel(application: Application) : AndroidViewModel(application
                     _showSnapshotPicker.value = true
                 }
             }
-            CliCommand.SNAPSHOT -> {
-                val tag = rawInput.substringAfter("-m", "").trim().removeSurrounding("\"").ifEmpty { "Manual" }
-                runSync(isFull = false, tag = tag)
+            CliCommand.CLOUD -> {
+                _showCloudManager.value = true
             }
             CliCommand.STATUS -> runStatusCheck()
             CliCommand.TEST -> runConnectionTest()
@@ -180,6 +183,7 @@ class TerminalViewModel(application: Application) : AndroidViewModel(application
             } finally {
                 _isBusy.value = false
                 SyncForegroundService.stop(getApplication())
+                NotificationHelper.notifyTaskCompleted(getApplication())
             }
         }
     }
@@ -203,6 +207,7 @@ class TerminalViewModel(application: Application) : AndroidViewModel(application
             } finally {
                 _isBusy.value = false
                 SyncForegroundService.stop(getApplication())
+                NotificationHelper.notifyTaskCompleted(getApplication())
             }
         }
     }
@@ -220,6 +225,7 @@ class TerminalViewModel(application: Application) : AndroidViewModel(application
                 addLog(TerminalLog(level = LogLevel.ERR, message = "Status check failed: ${e.message}"))
             }
             printCloudUsage()
+            NotificationHelper.notifyTaskCompleted(getApplication())
         }
     }
 
@@ -262,6 +268,7 @@ class TerminalViewModel(application: Application) : AndroidViewModel(application
             } else {
                 addLog(TerminalLog(level = LogLevel.ERR, message = "Connection failed: ${result.exceptionOrNull()?.message}"))
             }
+            NotificationHelper.notifyTaskCompleted(getApplication())
         }
     }
 
@@ -299,6 +306,31 @@ class TerminalViewModel(application: Application) : AndroidViewModel(application
     fun dismissCustomization() { _showCustomization.value = false }
     fun dismissKeysDialog() { _showKeysDialog.value = false }
 
+    fun finishOnboarding(derivedKey: String?, isExistingVault: Boolean) {
+        _showOnboarding.value = false
+        viewModelScope.launch {
+            if (!derivedKey.isNullOrBlank()) {
+                prefs.saveMasterKey(derivedKey)
+                addLog(TerminalLog(level = LogLevel.OK, message = "Master Key configured successfully."))
+            }
+            // Always trigger default cloud scan right after setup is done
+            addLog(TerminalLog(level = LogLevel.INFO, message = "Running initial cloud scan to check for existing backups..."))
+            try {
+                val result = syncManager.scanCloudSnapshots { log -> addLog(log) }
+                if (result.isSuccess) {
+                    val count = result.getOrNull()?.size ?: 0
+                    addLog(TerminalLog(level = LogLevel.OK, message = "Cloud scan complete. $count snapshot(s) available in vault."))
+                } else {
+                    addLog(TerminalLog(level = LogLevel.WARN, message = "Cloud scan: ${result.exceptionOrNull()?.message ?: "No existing backups found."}"))
+                }
+            } catch (e: Exception) {
+                addLog(TerminalLog(level = LogLevel.WARN, message = "Cloud scan notice: ${e.message}"))
+            } finally {
+                NotificationHelper.notifyTaskCompleted(getApplication())
+            }
+        }
+    }
+
     fun setTheme(themeId: String) {
         viewModelScope.launch {
             prefs.saveThemeId(themeId)
@@ -314,10 +346,18 @@ class TerminalViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
-    fun updateMasterKey(newKey: String) {
+    fun updateMasterKey(newKey: String, triggerScan: Boolean = true) {
         viewModelScope.launch {
             prefs.saveMasterKey(newKey)
             addLog(TerminalLog(level = LogLevel.OK, message = "Master Key updated successfully."))
+            if (triggerScan) {
+                addLog(TerminalLog(level = LogLevel.INFO, message = "Scanning cloud with new key..."))
+                val result = syncManager.scanCloudSnapshots { log -> addLog(log) }
+                if (result.isSuccess) {
+                    addLog(TerminalLog(level = LogLevel.OK, message = "Cloud catalog updated (${result.getOrNull()?.size ?: 0} snapshots total)."))
+                }
+                NotificationHelper.notifyTaskCompleted(getApplication())
+            }
         }
     }
 
@@ -346,6 +386,64 @@ class TerminalViewModel(application: Application) : AndroidViewModel(application
         viewModelScope.launch {
             prefs.saveFolder(uriString, name)
             addLog(TerminalLog(level = LogLevel.OK, message = "Target folder linked: $name"))
+        }
+    }
+
+    fun dismissCloudManager() {
+        _showCloudManager.value = false
+    }
+
+    fun openCloudManager() {
+        _showCloudManager.value = true
+    }
+
+    fun scanCloudSnapshots() {
+        if (_isBusy.value) return
+        _isBusy.value = true
+        viewModelScope.launch {
+            try {
+                val result = syncManager.scanCloudSnapshots { log -> addLog(log) }
+                if (result.isSuccess) {
+                    addLog(TerminalLog(level = LogLevel.OK, message = "Cloud catalog synchronized (${result.getOrNull()?.size ?: 0} snapshots total)."))
+                } else {
+                    addLog(TerminalLog(level = LogLevel.ERR, message = "Cloud scan failed: ${result.exceptionOrNull()?.message}"))
+                }
+            } finally {
+                _isBusy.value = false
+                NotificationHelper.notifyTaskCompleted(getApplication())
+            }
+        }
+    }
+
+    fun deleteCloudSnapshots(snapshotIds: List<String>) {
+        if (_isBusy.value) return
+        _isBusy.value = true
+        viewModelScope.launch {
+            try {
+                val result = syncManager.deleteCloudSnapshots(snapshotIds) { log -> addLog(log) }
+                if (result.isFailure) {
+                    addLog(TerminalLog(level = LogLevel.ERR, message = "Delete failed: ${result.exceptionOrNull()?.message}"))
+                }
+            } finally {
+                _isBusy.value = false
+                NotificationHelper.notifyTaskCompleted(getApplication())
+            }
+        }
+    }
+
+    fun wipeCloudVault() {
+        if (_isBusy.value) return
+        _isBusy.value = true
+        viewModelScope.launch {
+            try {
+                val result = syncManager.wipeAllCloudVault { log -> addLog(log) }
+                if (result.isFailure) {
+                    addLog(TerminalLog(level = LogLevel.ERR, message = "Vault wipe failed: ${result.exceptionOrNull()?.message}"))
+                }
+            } finally {
+                _isBusy.value = false
+                NotificationHelper.notifyTaskCompleted(getApplication())
+            }
         }
     }
 }

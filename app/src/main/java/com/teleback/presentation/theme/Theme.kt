@@ -7,135 +7,149 @@ import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 
-enum class TeleBackThemeId(val id: String, val displayName: String, val isDark: Boolean) {
-    MATRIX_MINT("matrix_mint", "Matrix Mint (Dark)", true),
-    OLED_AMBER("oled_amber", "OLED Amber (Dark)", true),
-    DRACULA_NEON("dracula_neon", "Dracula Neon (Dark)", true),
-    SOLARIZED_PAPER("solarized_paper", "Solarized Paper (Light)", false),
-    NORD_FROST("nord_frost", "Nord Frost (Light)", false),
-    MINIMAL_SLATE("minimal_slate", "Minimal Slate (Light)", false);
+enum class ThemeMode(val id: String, val label: String) {
+    DARK("dark", "Dark"),
+    LIGHT("light", "Light")
+}
+
+enum class ThemeColor(val id: String, val label: String, val previewColor: Color) {
+    GREEN("green", "Matrix Green", Color(0xFF00FFA3)),
+    AMBER("amber", "Solar Amber", Color(0xFFFFB800)),
+    CYAN("cyan", "Cyber Neon", Color(0xFF00D2FF))
+}
+
+enum class TeleBackThemeId(
+    val id: String,
+    val mode: ThemeMode,
+    val color: ThemeColor,
+    val displayName: String
+) {
+    DARK_GREEN("dark_green", ThemeMode.DARK, ThemeColor.GREEN, "Dark - Matrix Green"),
+    DARK_AMBER("dark_amber", ThemeMode.DARK, ThemeColor.AMBER, "Dark - Solar Amber"),
+    DARK_CYAN("dark_cyan", ThemeMode.DARK, ThemeColor.CYAN, "Dark - Cyber Neon"),
+    LIGHT_GREEN("light_green", ThemeMode.LIGHT, ThemeColor.GREEN, "Light - Matrix Green"),
+    LIGHT_AMBER("light_amber", ThemeMode.LIGHT, ThemeColor.AMBER, "Light - Solar Amber"),
+    LIGHT_CYAN("light_cyan", ThemeMode.LIGHT, ThemeColor.CYAN, "Light - Cyber Neon");
 
     companion object {
-        fun fromId(id: String?): TeleBackThemeId = entries.firstOrNull { it.id == id } ?: MATRIX_MINT
+        fun fromId(id: String?): TeleBackThemeId = when (id) {
+            "dark_green", "matrix_mint" -> DARK_GREEN
+            "dark_amber", "oled_amber" -> DARK_AMBER
+            "dark_cyan", "dracula_neon" -> DARK_CYAN
+            "light_green", "minimal_slate" -> LIGHT_GREEN
+            "light_amber", "solarized_paper" -> LIGHT_AMBER
+            "light_cyan", "nord_frost" -> LIGHT_CYAN
+            else -> DARK_GREEN
+        }
+
+        fun fromModeAndColor(mode: ThemeMode, color: ThemeColor): TeleBackThemeId {
+            return entries.firstOrNull { it.mode == mode && it.color == color } ?: DARK_GREEN
+        }
     }
 }
 
-// 1. Matrix Mint (Default Dark)
-private val MatrixMintScheme = darkColorScheme(
+// 1. Dark - Matrix Green
+private val DarkGreenScheme = darkColorScheme(
     primary = Color(0xFF00FFA3),
     onPrimary = Color(0xFF070A0F),
     secondary = Color(0xFF00D2FF),
     onSecondary = Color(0xFF070A0F),
-    tertiary = Color(0xFFFFB800),
-    onTertiary = Color(0xFF070A0F),
     background = Color(0xFF070A0F),
     onBackground = Color(0xFFE6EDF3),
-    surface = Color(0xFF0D1117),
+    surface = Color(0xFF0D1219),
     onSurface = Color(0xFFE6EDF3),
-    surfaceVariant = Color(0xFF161B22),
+    surfaceVariant = Color(0xFF161F2C),
     onSurfaceVariant = Color(0xFF8B949E),
-    outline = Color(0xFF30363D)
+    outline = Color(0xFF273549)
 )
 
-// 2. OLED Amber (Dark)
-private val OledAmberScheme = darkColorScheme(
+// 2. Dark - Solar Amber (True OLED black + Amber)
+private val DarkAmberScheme = darkColorScheme(
     primary = Color(0xFFFFB800),
     onPrimary = Color(0xFF000000),
     secondary = Color(0xFFFF7A00),
     onSecondary = Color(0xFF000000),
-    tertiary = Color(0xFFFFD54F),
-    onTertiary = Color(0xFF000000),
     background = Color(0xFF000000),
     onBackground = Color(0xFFFFF8E7),
-    surface = Color(0xFF0A0A0A),
+    surface = Color(0xFF120E04),
     onSurface = Color(0xFFFFF8E7),
-    surfaceVariant = Color(0xFF171717),
+    surfaceVariant = Color(0xFF211805),
     onSurfaceVariant = Color(0xFFA89A80),
-    outline = Color(0xFF333333)
+    outline = Color(0xFF42300A)
 )
 
-// 3. Dracula Neon (Dark)
-private val DraculaNeonScheme = darkColorScheme(
-    primary = Color(0xFF50FA7B),
-    onPrimary = Color(0xFF181824),
-    secondary = Color(0xFF8BE9FD),
-    onSecondary = Color(0xFF181824),
-    tertiary = Color(0xFFFF79C6),
-    onTertiary = Color(0xFF181824),
-    background = Color(0xFF181824),
-    onBackground = Color(0xFFF8F8F2),
-    surface = Color(0xFF21222C),
-    onSurface = Color(0xFFF8F8F2),
-    surfaceVariant = Color(0xFF282A36),
-    onSurfaceVariant = Color(0xFF6272A4),
-    outline = Color(0xFF44475A)
+// 3. Dark - Cyber Neon (Deep navy + Neon Cyan & Purple)
+private val DarkCyanScheme = darkColorScheme(
+    primary = Color(0xFF00D2FF),
+    onPrimary = Color(0xFF060A12),
+    secondary = Color(0xFFB388FF),
+    onSecondary = Color(0xFF060A12),
+    background = Color(0xFF060A12),
+    onBackground = Color(0xFFF0F6FF),
+    surface = Color(0xFF0D1524),
+    onSurface = Color(0xFFF0F6FF),
+    surfaceVariant = Color(0xFF162238),
+    onSurfaceVariant = Color(0xFF7F95B5),
+    outline = Color(0xFF243657)
 )
 
-// 4. Solarized Paper (Light)
-private val SolarizedPaperScheme = lightColorScheme(
-    primary = Color(0xFF2AA198),
+// 4. Light - Matrix Green (Crisp white/grey + Deep Terminal Green)
+private val LightGreenScheme = lightColorScheme(
+    primary = Color(0xFF00875A),
     onPrimary = Color(0xFFFFFFFF),
-    secondary = Color(0xFF268BD2),
+    secondary = Color(0xFF0065FF),
     onSecondary = Color(0xFFFFFFFF),
-    tertiary = Color(0xFFB58900),
-    onTertiary = Color(0xFFFFFFFF),
-    background = Color(0xFFFDF6E3),
-    onBackground = Color(0xFF073642),
-    surface = Color(0xFFF7F0D8),
-    onSurface = Color(0xFF073642),
-    surfaceVariant = Color(0xFFEEE8D5),
-    onSurfaceVariant = Color(0xFF586E75),
-    outline = Color(0xFF93A1A1)
-)
-
-// 5. Nord Frost (Light)
-private val NordFrostScheme = lightColorScheme(
-    primary = Color(0xFF5E81AC),
-    onPrimary = Color(0xFFFFFFFF),
-    secondary = Color(0xFF88C0D0),
-    onSecondary = Color(0xFF2E3440),
-    tertiary = Color(0xFF81A1C1),
-    onTertiary = Color(0xFFFFFFFF),
-    background = Color(0xFFECEFF4),
-    onBackground = Color(0xFF2E3440),
-    surface = Color(0xFFE5E9F0),
-    onSurface = Color(0xFF2E3440),
-    surfaceVariant = Color(0xFFD8DEE9),
-    onSurfaceVariant = Color(0xFF4C566A),
-    outline = Color(0xFF4C566A)
-)
-
-// 6. Minimal Slate (Light)
-private val MinimalSlateScheme = lightColorScheme(
-    primary = Color(0xFF059669),
-    onPrimary = Color(0xFFFFFFFF),
-    secondary = Color(0xFF2563EB),
-    onSecondary = Color(0xFFFFFFFF),
-    tertiary = Color(0xFFD97706),
-    onTertiary = Color(0xFFFFFFFF),
-    background = Color(0xFFF8F9FA),
-    onBackground = Color(0xFF111827),
+    background = Color(0xFFF4F6F8),
+    onBackground = Color(0xFF0F172A),
     surface = Color(0xFFFFFFFF),
-    onSurface = Color(0xFF111827),
-    surfaceVariant = Color(0xFFE9ECEF),
-    onSurfaceVariant = Color(0xFF4B5563),
-    outline = Color(0xFFCED4DA)
+    onSurface = Color(0xFF0F172A),
+    surfaceVariant = Color(0xFFE2E8F0),
+    onSurfaceVariant = Color(0xFF475569),
+    outline = Color(0xFFCBD5E1)
 )
 
-fun getThemeColorScheme(themeId: TeleBackThemeId): ColorScheme {
-    return when (themeId) {
-        TeleBackThemeId.MATRIX_MINT -> MatrixMintScheme
-        TeleBackThemeId.OLED_AMBER -> OledAmberScheme
-        TeleBackThemeId.DRACULA_NEON -> DraculaNeonScheme
-        TeleBackThemeId.SOLARIZED_PAPER -> SolarizedPaperScheme
-        TeleBackThemeId.NORD_FROST -> NordFrostScheme
-        TeleBackThemeId.MINIMAL_SLATE -> MinimalSlateScheme
-    }
+// 5. Light - Solar Amber (Warm cream/paper + Dark Amber)
+private val LightAmberScheme = lightColorScheme(
+    primary = Color(0xFFD97706),
+    onPrimary = Color(0xFFFFFFFF),
+    secondary = Color(0xFFB45309),
+    onSecondary = Color(0xFFFFFFFF),
+    background = Color(0xFFFFFDF5),
+    onBackground = Color(0xFF291B00),
+    surface = Color(0xFFFFFFFF),
+    onSurface = Color(0xFF291B00),
+    surfaceVariant = Color(0xFFF7F2E6),
+    onSurfaceVariant = Color(0xFF785E2F),
+    outline = Color(0xFFE5D8B8)
+)
+
+// 6. Light - Cyber Neon (Ice blue-white + Vibrant Deep Cyan)
+private val LightCyanScheme = lightColorScheme(
+    primary = Color(0xFF0284C7),
+    onPrimary = Color(0xFFFFFFFF),
+    secondary = Color(0xFF7C3AED),
+    onSecondary = Color(0xFFFFFFFF),
+    background = Color(0xFFF0F7FF),
+    onBackground = Color(0xFF0C1E38),
+    surface = Color(0xFFFFFFFF),
+    onSurface = Color(0xFF0C1E38),
+    surfaceVariant = Color(0xFFE0EDFC),
+    onSurfaceVariant = Color(0xFF3B567D),
+    outline = Color(0xFFBFDBFE)
+)
+
+fun getThemeColorScheme(themeId: TeleBackThemeId): ColorScheme = when (themeId) {
+    TeleBackThemeId.DARK_GREEN -> DarkGreenScheme
+    TeleBackThemeId.DARK_AMBER -> DarkAmberScheme
+    TeleBackThemeId.DARK_CYAN -> DarkCyanScheme
+    TeleBackThemeId.LIGHT_GREEN -> LightGreenScheme
+    TeleBackThemeId.LIGHT_AMBER -> LightAmberScheme
+    TeleBackThemeId.LIGHT_CYAN -> LightCyanScheme
 }
 
 @Composable
 fun TeleBackTheme(
-    themeId: TeleBackThemeId = TeleBackThemeId.MATRIX_MINT,
+    themeId: TeleBackThemeId = TeleBackThemeId.DARK_GREEN,
     content: @Composable () -> Unit
 ) {
     MaterialTheme(

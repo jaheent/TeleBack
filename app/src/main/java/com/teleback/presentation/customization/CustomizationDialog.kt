@@ -22,6 +22,7 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -33,16 +34,8 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import com.teleback.presentation.theme.MonospaceFontFamily
 import com.teleback.presentation.theme.TeleBackThemeId
-import com.teleback.presentation.theme.TerminalBlack
-import com.teleback.presentation.theme.TerminalBorder
-import com.teleback.presentation.theme.TerminalCyan
-import com.teleback.presentation.theme.TerminalDark
-import com.teleback.presentation.theme.TerminalMint
-import com.teleback.presentation.theme.TerminalSurface
-import com.teleback.presentation.theme.TerminalTextMuted
-import com.teleback.presentation.theme.TerminalTextPrimary
-import com.teleback.presentation.theme.TerminalTextSecondary
-import com.teleback.presentation.theme.getThemeColorScheme
+import com.teleback.presentation.theme.ThemeColor
+import com.teleback.presentation.theme.ThemeMode
 
 @Composable
 fun CustomizationDialog(
@@ -52,13 +45,16 @@ fun CustomizationDialog(
     onSelectIcon: (String) -> Unit,
     onDismiss: () -> Unit
 ) {
+    val activeTheme = TeleBackThemeId.fromId(currentThemeId)
+    val colorScheme = MaterialTheme.colorScheme
+
     Dialog(onDismissRequest = onDismiss) {
         Card(
             modifier = Modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(8.dp))
-                .border(1.dp, TerminalCyan, RoundedCornerShape(8.dp)),
-            colors = CardDefaults.cardColors(containerColor = TerminalDark)
+                .border(1.dp, colorScheme.outline, RoundedCornerShape(8.dp)),
+            colors = CardDefaults.cardColors(containerColor = colorScheme.surface)
         ) {
             Column(
                 modifier = Modifier
@@ -73,79 +69,57 @@ fun CustomizationDialog(
                 ) {
                     Text(
                         text = "CUSTOMIZATION SUITE [7]",
-                        color = TerminalCyan,
+                        color = colorScheme.primary,
                         fontSize = 13.sp,
                         fontFamily = MonospaceFontFamily
                     )
                     Text(
                         text = "ESC",
-                        color = TerminalTextMuted,
+                        color = colorScheme.onSurfaceVariant,
                         fontSize = 11.sp,
                         fontFamily = MonospaceFontFamily,
                         modifier = Modifier.clickable { onDismiss() }
                     )
                 }
 
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(14.dp))
 
-                // Section 1: Themes
+                // Section 1: Mode (Dark vs Light)
                 Text(
-                    text = "THEMES (3 Dark · 3 Light)",
-                    color = TerminalMint,
+                    text = "THEME MODE",
+                    color = colorScheme.primary,
                     fontSize = 11.sp,
                     fontFamily = MonospaceFontFamily
                 )
                 Spacer(modifier = Modifier.height(6.dp))
 
-                TeleBackThemeId.entries.forEach { theme ->
-                    val isSelected = theme.id == currentThemeId
-                    val scheme = getThemeColorScheme(theme)
-
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 3.dp)
-                            .clip(RoundedCornerShape(4.dp))
-                            .background(if (isSelected) TerminalSurface else Color.Transparent)
-                            .border(
-                                width = 1.dp,
-                                color = if (isSelected) TerminalMint else TerminalBorder,
-                                shape = RoundedCornerShape(4.dp)
-                            )
-                            .clickable { onSelectTheme(theme.id) }
-                            .padding(horizontal = 8.dp, vertical = 6.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        // Swatches
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    ThemeMode.entries.forEach { mode ->
+                        val isModeSelected = activeTheme.mode == mode
                         Box(
                             modifier = Modifier
-                                .size(14.dp)
-                                .clip(CircleShape)
-                                .background(scheme.background)
-                                .border(1.dp, TerminalBorder, CircleShape)
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Box(
-                            modifier = Modifier
-                                .size(14.dp)
-                                .clip(CircleShape)
-                                .background(scheme.primary)
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-
-                        Text(
-                            text = theme.displayName,
-                            color = if (isSelected) TerminalMint else TerminalTextPrimary,
-                            fontSize = 11.sp,
-                            fontFamily = MonospaceFontFamily,
-                            modifier = Modifier.weight(1f)
-                        )
-
-                        if (isSelected) {
+                                .weight(1f)
+                                .clip(RoundedCornerShape(4.dp))
+                                .background(if (isModeSelected) colorScheme.primary.copy(alpha = 0.15f) else colorScheme.surfaceVariant)
+                                .border(
+                                    width = if (isModeSelected) 1.5.dp else 1.dp,
+                                    color = if (isModeSelected) colorScheme.primary else colorScheme.outline,
+                                    shape = RoundedCornerShape(4.dp)
+                                )
+                                .clickable {
+                                    val newTheme = TeleBackThemeId.fromModeAndColor(mode, activeTheme.color)
+                                    onSelectTheme(newTheme.id)
+                                }
+                                .padding(vertical = 8.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
                             Text(
-                                text = "ACTIVE",
-                                color = TerminalMint,
-                                fontSize = 9.sp,
+                                text = mode.label.uppercase(),
+                                color = if (isModeSelected) colorScheme.primary else colorScheme.onSurface,
+                                fontSize = 11.sp,
                                 fontFamily = MonospaceFontFamily
                             )
                         }
@@ -153,34 +127,87 @@ fun CustomizationDialog(
                 }
 
                 Spacer(modifier = Modifier.height(14.dp))
-                HorizontalDivider(color = TerminalBorder, thickness = 1.dp)
+
+                // Section 2: 3 Color Accents
+                Text(
+                    text = "ACCENT COLOR",
+                    color = colorScheme.primary,
+                    fontSize = 11.sp,
+                    fontFamily = MonospaceFontFamily
+                )
+                Spacer(modifier = Modifier.height(6.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    ThemeColor.entries.forEach { color ->
+                        val isColorSelected = activeTheme.color == color
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(4.dp))
+                                .background(if (isColorSelected) color.previewColor.copy(alpha = 0.18f) else colorScheme.surfaceVariant)
+                                .border(
+                                    width = if (isColorSelected) 1.5.dp else 1.dp,
+                                    color = if (isColorSelected) color.previewColor else colorScheme.outline,
+                                    shape = RoundedCornerShape(4.dp)
+                                )
+                                .clickable {
+                                    val newTheme = TeleBackThemeId.fromModeAndColor(activeTheme.mode, color)
+                                    onSelectTheme(newTheme.id)
+                                }
+                                .padding(vertical = 8.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(10.dp)
+                                        .clip(CircleShape)
+                                        .background(color.previewColor)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = color.label.split(" ").last(),
+                                    color = if (isColorSelected) colorScheme.onSurface else colorScheme.onSurfaceVariant,
+                                    fontSize = 11.sp,
+                                    fontFamily = MonospaceFontFamily
+                                )
+                            }
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(14.dp))
+                HorizontalDivider(color = colorScheme.outline, thickness = 1.dp)
                 Spacer(modifier = Modifier.height(14.dp))
 
-                // Section 2: App Icons
+                // Section 3: App Icons (Icon B as Default)
                 Text(
                     text = "APP ICONS (3 Modern Designs)",
-                    color = TerminalMint,
+                    color = colorScheme.primary,
                     fontSize = 11.sp,
                     fontFamily = MonospaceFontFamily
                 )
                 Spacer(modifier = Modifier.height(6.dp))
 
                 IconOptionRow(
-                    id = "icon_a",
-                    name = "Icon A: Neon Shield (Default)",
-                    description = "Cyan security contour with matrix mint chevron >_",
-                    isSelected = currentIconId == "icon_a",
-                    onSelect = { onSelectIcon("icon_a") }
+                    id = "icon_b",
+                    name = "Icon B: Dual-Orbit Sync (Default)",
+                    description = "Electric mint & cyan orbit ring with paper plane",
+                    isSelected = currentIconId == "icon_b" || currentIconId == "",
+                    onSelect = { onSelectIcon("icon_b") }
                 )
 
                 Spacer(modifier = Modifier.height(4.dp))
 
                 IconOptionRow(
-                    id = "icon_b",
-                    name = "Icon B: Dual-Orbit Sync",
-                    description = "Electric mint & cyan orbit ring with paper plane",
-                    isSelected = currentIconId == "icon_b",
-                    onSelect = { onSelectIcon("icon_b") }
+                    id = "icon_a",
+                    name = "Icon A: Neon Terminal Shield",
+                    description = "Cyan security contour with matrix mint chevron >_",
+                    isSelected = currentIconId == "icon_a",
+                    onSelect = { onSelectIcon("icon_a") }
                 )
 
                 Spacer(modifier = Modifier.height(4.dp))
@@ -198,7 +225,10 @@ fun CustomizationDialog(
                 Button(
                     onClick = onDismiss,
                     modifier = Modifier.fillMaxWidth(),
-                    colors = ButtonDefaults.buttonColors(containerColor = TerminalMint, contentColor = TerminalBlack)
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = colorScheme.primary,
+                        contentColor = colorScheme.onPrimary
+                    )
                 ) {
                     Text("Done", fontFamily = MonospaceFontFamily)
                 }
@@ -215,14 +245,16 @@ private fun IconOptionRow(
     isSelected: Boolean,
     onSelect: () -> Unit
 ) {
+    val colorScheme = MaterialTheme.colorScheme
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(4.dp))
-            .background(if (isSelected) TerminalSurface else Color.Transparent)
+            .background(if (isSelected) colorScheme.surfaceVariant else Color.Transparent)
             .border(
                 width = 1.dp,
-                color = if (isSelected) TerminalCyan else TerminalBorder,
+                color = if (isSelected) colorScheme.primary else colorScheme.outline,
                 shape = RoundedCornerShape(4.dp)
             )
             .clickable(onClick = onSelect)
@@ -235,14 +267,14 @@ private fun IconOptionRow(
         ) {
             Text(
                 text = name,
-                color = if (isSelected) TerminalCyan else TerminalTextPrimary,
+                color = if (isSelected) colorScheme.primary else colorScheme.onSurface,
                 fontSize = 11.sp,
                 fontFamily = MonospaceFontFamily
             )
             if (isSelected) {
                 Text(
                     text = "SELECTED",
-                    color = TerminalCyan,
+                    color = colorScheme.primary,
                     fontSize = 9.sp,
                     fontFamily = MonospaceFontFamily
                 )
@@ -251,7 +283,7 @@ private fun IconOptionRow(
         Spacer(modifier = Modifier.height(2.dp))
         Text(
             text = description,
-            color = TerminalTextMuted,
+            color = colorScheme.onSurfaceVariant,
             fontSize = 9.sp,
             lineHeight = 13.sp,
             fontFamily = MonospaceFontFamily

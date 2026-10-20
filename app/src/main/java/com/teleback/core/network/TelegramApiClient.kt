@@ -59,6 +59,43 @@ class TelegramApiClient(
         }
     }
 
+    suspend fun getChat(chatId: Long): Result<TelegramChat> = withContext(Dispatchers.IO) {
+        runCatching {
+            val request = Request.Builder()
+                .url("$baseUrl/getChat?chat_id=$chatId")
+                .get()
+                .build()
+            client.newCall(request).execute().use { response ->
+                val body = response.body?.string().orEmpty()
+                parseOrThrow<TelegramChat>(response.code, body, "Failed to get chat info")
+            }
+        }
+    }
+
+    suspend fun forwardMessage(
+        chatId: Long,
+        fromChatId: Long,
+        messageId: Long
+    ): Result<TelegramMessage> = withContext(Dispatchers.IO) {
+        runCatching {
+            val formBody = okhttp3.FormBody.Builder()
+                .add("chat_id", chatId.toString())
+                .add("from_chat_id", fromChatId.toString())
+                .add("message_id", messageId.toString())
+                .build()
+
+            val request = Request.Builder()
+                .url("$baseUrl/forwardMessage")
+                .post(formBody)
+                .build()
+
+            client.newCall(request).execute().use { response ->
+                val body = response.body?.string().orEmpty()
+                parseOrThrow<TelegramMessage>(response.code, body, "Failed to forward message")
+            }
+        }
+    }
+
     suspend fun getUpdates(offset: Long? = null): Result<List<TelegramUpdate>> = withContext(Dispatchers.IO) {
         runCatching {
             val urlBuilder = StringBuilder("$baseUrl/getUpdates?limit=20")

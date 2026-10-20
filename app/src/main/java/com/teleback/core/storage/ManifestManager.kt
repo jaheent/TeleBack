@@ -32,12 +32,14 @@ object ManifestManager {
         bytes: ByteArray,
         masterKeyBase64: String? = null
     ): SnapshotManifest {
-        val decryptedBytes = if (masterKeyBase64 != null) {
+        val decryptedBytes = if (CryptoEngine.isEncrypted(bytes)) {
+            if (masterKeyBase64.isNullOrBlank()) {
+                throw IllegalStateException("Manifest is encrypted but master key is not configured.")
+            }
             try {
                 CryptoEngine.decryptBytes(bytes, masterKeyBase64)
             } catch (e: Exception) {
-                // If it fails decryption, maybe it was not encrypted
-                bytes
+                throw SecurityException("Failed to decrypt manifest: Master Passphrase does not match encryption key.", e)
             }
         } else {
             bytes

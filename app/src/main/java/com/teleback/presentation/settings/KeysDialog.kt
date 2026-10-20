@@ -25,6 +25,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
@@ -39,6 +40,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -47,15 +49,8 @@ import com.teleback.core.crypto.CryptoEngine
 import com.teleback.presentation.theme.MonospaceFontFamily
 import com.teleback.presentation.theme.TerminalAmber
 import com.teleback.presentation.theme.TerminalBlack
-import com.teleback.presentation.theme.TerminalBorder
 import com.teleback.presentation.theme.TerminalCyan
-import com.teleback.presentation.theme.TerminalDark
-import com.teleback.presentation.theme.TerminalMint
 import com.teleback.presentation.theme.TerminalRed
-import com.teleback.presentation.theme.TerminalSurface
-import com.teleback.presentation.theme.TerminalTextMuted
-import com.teleback.presentation.theme.TerminalTextPrimary
-import com.teleback.presentation.theme.TerminalTextSecondary
 
 @Composable
 fun KeysDialog(
@@ -64,10 +59,12 @@ fun KeysDialog(
     onDismiss: () -> Unit
 ) {
     val context = LocalContext.current
-    var inputKey by remember { mutableStateOf("") }
-    var passphraseInput by remember { mutableStateOf("") }
-    var confirmInput by remember { mutableStateOf("") }
+    var restorePassphrase by remember { mutableStateOf("") }
+    var newPassphrase by remember { mutableStateOf("") }
+    var confirmNewPassphrase by remember { mutableStateOf("") }
     var understood by remember { mutableStateOf(false) }
+    var inputKey by remember { mutableStateOf("") }
+
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var successMessage by remember { mutableStateOf<String?>(null) }
 
@@ -76,8 +73,8 @@ fun KeysDialog(
             modifier = Modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(8.dp))
-                .border(1.dp, TerminalAmber, RoundedCornerShape(8.dp)),
-            colors = CardDefaults.cardColors(containerColor = TerminalDark)
+                .border(1.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(8.dp)),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
         ) {
             Column(
                 modifier = Modifier
@@ -92,13 +89,14 @@ fun KeysDialog(
                 ) {
                     Text(
                         text = "SECURITY // MASTER KEY [8]",
-                        color = TerminalAmber,
+                        color = MaterialTheme.colorScheme.primary,
                         fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
                         fontFamily = MonospaceFontFamily
                     )
                     Text(
-                        text = "AES-GCM",
-                        color = TerminalTextMuted,
+                        text = "AES-256-GCM",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                         fontSize = 11.sp,
                         fontFamily = MonospaceFontFamily
                     )
@@ -118,13 +116,13 @@ fun KeysDialog(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(4.dp))
-                        .background(TerminalSurface)
-                        .border(1.dp, TerminalBorder, RoundedCornerShape(4.dp))
+                        .background(MaterialTheme.colorScheme.surfaceVariant)
+                        .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(4.dp))
                         .padding(8.dp)
                 ) {
                     Text(
                         text = currentMasterKey,
-                        color = TerminalMint,
+                        color = MaterialTheme.colorScheme.primary,
                         fontSize = 11.sp,
                         fontFamily = MonospaceFontFamily,
                         lineHeight = 15.sp
@@ -141,97 +139,138 @@ fun KeysDialog(
                         Toast.makeText(context, "Master Key copied to clipboard", Toast.LENGTH_SHORT).show()
                     },
                     modifier = Modifier.fillMaxWidth(),
-                    colors = ButtonDefaults.outlinedButtonColors(contentColor = TerminalMint),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, TerminalMint)
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.primary),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.primary)
                 ) {
-                    Text("Copy Key to Clipboard", fontFamily = MonospaceFontFamily)
+                    Text("Copy Base64 Key to Clipboard", fontFamily = MonospaceFontFamily, fontSize = 11.sp)
                 }
 
-                Spacer(modifier = Modifier.height(6.dp))
+                Spacer(modifier = Modifier.height(12.dp))
+                HorizontalDivider(color = MaterialTheme.colorScheme.outline, thickness = 1.dp)
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // OPTION 1: Restore Vault with Existing Passphrase
                 Text(
-                    text = "Save this key if switching phones or reinstalling. Without it, encrypted cloud backups cannot be decrypted.",
-                    color = TerminalAmber,
+                    text = "1. RESTORE WITH PASSPHRASE",
+                    color = MaterialTheme.colorScheme.primary,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    fontFamily = MonospaceFontFamily
+                )
+                Text(
+                    text = "Reinstalling on a new phone? Enter your vault passphrase to restore your encryption key.",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     fontSize = 10.sp,
                     lineHeight = 14.sp,
                     fontFamily = MonospaceFontFamily
                 )
+                Spacer(modifier = Modifier.height(6.dp))
+
+                OutlinedTextField(
+                    value = restorePassphrase,
+                    onValueChange = {
+                        restorePassphrase = it
+                        errorMessage = null
+                    },
+                    label = { Text("Vault Passphrase", fontSize = 11.sp, fontFamily = MonospaceFontFamily) },
+                    singleLine = true,
+                    visualTransformation = PasswordVisualTransformation(),
+                    modifier = Modifier.fillMaxWidth(),
+                    textStyle = TextStyle(color = MaterialTheme.colorScheme.onSurface, fontSize = 11.sp, fontFamily = MonospaceFontFamily),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = MaterialTheme.colorScheme.primary,
+                        unfocusedBorderColor = MaterialTheme.colorScheme.outline
+                    )
+                )
+                Spacer(modifier = Modifier.height(6.dp))
+
+                Button(
+                    onClick = {
+                        val trimmed = restorePassphrase.trim()
+                        if (trimmed.isNotBlank()) {
+                            val derived = CryptoEngine.deriveKeyFromPassphrase(trimmed)
+                            onSaveKey(derived)
+                            successMessage = "Vault key derived from passphrase and applied!"
+                            restorePassphrase = ""
+                        }
+                    },
+                    enabled = restorePassphrase.isNotBlank(),
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary, contentColor = MaterialTheme.colorScheme.surface)
+                ) {
+                    Text("Unlock & Apply Key", fontFamily = MonospaceFontFamily, fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                }
 
                 Spacer(modifier = Modifier.height(12.dp))
-                HorizontalDivider(color = TerminalBorder, thickness = 1.dp)
+                HorizontalDivider(color = MaterialTheme.colorScheme.outline, thickness = 1.dp)
                 Spacer(modifier = Modifier.height(12.dp))
 
-                // Option A: Set Custom Memorable Passphrase
+                // OPTION 2: Create New Passphrase
                 Text(
-                    text = "OPTION A: SET CUSTOM PASSPHRASE",
+                    text = "2. CREATE NEW PASSPHRASE",
                     color = TerminalCyan,
                     fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
                     fontFamily = MonospaceFontFamily
                 )
                 Text(
-                    text = "Derives a 256-bit AES key via PBKDF2. You can type this same passphrase on any phone.",
-                    color = TerminalTextSecondary,
+                    text = "Derives a fresh 256-bit AES key via PBKDF2.",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     fontSize = 10.sp,
-                    lineHeight = 13.sp,
                     fontFamily = MonospaceFontFamily
                 )
                 Spacer(modifier = Modifier.height(6.dp))
 
                 OutlinedTextField(
-                    value = passphraseInput,
+                    value = newPassphrase,
                     onValueChange = {
-                        passphraseInput = it
+                        newPassphrase = it
                         errorMessage = null
                     },
-                    label = { Text("Enter Memorable Passphrase", fontSize = 11.sp, fontFamily = MonospaceFontFamily) },
+                    label = { Text("New Passphrase (min 6 chars)", fontSize = 11.sp, fontFamily = MonospaceFontFamily) },
                     singleLine = true,
                     visualTransformation = PasswordVisualTransformation(),
                     modifier = Modifier.fillMaxWidth(),
-                    textStyle = TextStyle(color = TerminalTextPrimary, fontSize = 11.sp, fontFamily = MonospaceFontFamily),
+                    textStyle = TextStyle(color = MaterialTheme.colorScheme.onSurface, fontSize = 11.sp, fontFamily = MonospaceFontFamily),
                     colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = TerminalMint,
-                        unfocusedBorderColor = TerminalBorder,
-                        focusedLabelColor = TerminalMint,
-                        unfocusedLabelColor = TerminalTextSecondary
+                        focusedBorderColor = MaterialTheme.colorScheme.primary,
+                        unfocusedBorderColor = MaterialTheme.colorScheme.outline
+                    )
+                )
+                Spacer(modifier = Modifier.height(6.dp))
+
+                OutlinedTextField(
+                    value = confirmNewPassphrase,
+                    onValueChange = {
+                        confirmNewPassphrase = it
+                        errorMessage = null
+                    },
+                    label = { Text("Confirm New Passphrase", fontSize = 11.sp, fontFamily = MonospaceFontFamily) },
+                    singleLine = true,
+                    visualTransformation = PasswordVisualTransformation(),
+                    modifier = Modifier.fillMaxWidth(),
+                    textStyle = TextStyle(color = MaterialTheme.colorScheme.onSurface, fontSize = 11.sp, fontFamily = MonospaceFontFamily),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = MaterialTheme.colorScheme.primary,
+                        unfocusedBorderColor = MaterialTheme.colorScheme.outline
                     )
                 )
 
                 Spacer(modifier = Modifier.height(6.dp))
-                OutlinedTextField(
-                    value = confirmInput,
-                    onValueChange = {
-                        confirmInput = it
-                        errorMessage = null
-                    },
-                    label = { Text("Re-enter Passphrase", fontSize = 11.sp, fontFamily = MonospaceFontFamily) },
-                    singleLine = true,
-                    visualTransformation = PasswordVisualTransformation(),
-                    isError = confirmInput.isNotEmpty() && confirmInput != passphraseInput,
-                    modifier = Modifier.fillMaxWidth(),
-                    textStyle = TextStyle(color = TerminalTextPrimary, fontSize = 11.sp, fontFamily = MonospaceFontFamily),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = TerminalMint,
-                        unfocusedBorderColor = TerminalBorder,
-                        focusedLabelColor = TerminalMint,
-                        unfocusedLabelColor = TerminalTextSecondary
-                    )
-                )
 
-                Spacer(modifier = Modifier.height(8.dp))
-
-                // Red warning banner: a forgotten passphrase means permanently lost backups.
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(4.dp))
-                        .background(TerminalRed.copy(alpha = 0.14f))
+                        .background(TerminalRed.copy(alpha = 0.15f))
                         .border(1.dp, TerminalRed, RoundedCornerShape(4.dp))
                         .padding(8.dp)
                 ) {
                     Text(
                         text = "Forgetting this passphrase, encrypted backups CANNOT be recovered. No reset and No recovery.",
                         color = TerminalRed,
-                        fontSize = 11.sp,
-                        lineHeight = 15.sp,
+                        fontSize = 10.sp,
+                        lineHeight = 14.sp,
                         fontFamily = MonospaceFontFamily
                     )
                 }
@@ -248,59 +287,51 @@ fun KeysDialog(
                         onCheckedChange = { understood = it },
                         colors = CheckboxDefaults.colors(
                             checkedColor = TerminalRed,
-                            uncheckedColor = TerminalTextSecondary,
+                            uncheckedColor = MaterialTheme.colorScheme.onSurfaceVariant,
                             checkmarkColor = TerminalBlack
                         )
                     )
                     Text(
                         text = "Unrecoverable, understood.",
-                        color = TerminalTextPrimary,
+                        color = MaterialTheme.colorScheme.onSurface,
                         fontSize = 11.sp,
                         fontFamily = MonospaceFontFamily
                     )
                 }
 
-                Spacer(modifier = Modifier.height(2.dp))
-                Text(
-                    text = "Setting a new key also means older snapshots made with the previous key can only be restored with that key.",
-                    color = TerminalAmber,
-                    fontSize = 10.sp,
-                    lineHeight = 14.sp,
-                    fontFamily = MonospaceFontFamily
-                )
-
                 Spacer(modifier = Modifier.height(6.dp))
                 Button(
                     onClick = {
-                        if (passphraseInput.length < 6) {
+                        if (newPassphrase.length < 6) {
                             errorMessage = "Passphrase must be at least 6 characters"
-                        } else if (passphraseInput != confirmInput) {
+                        } else if (newPassphrase != confirmNewPassphrase) {
                             errorMessage = "Passphrases do not match"
                         } else {
-                            val derived = CryptoEngine.deriveKeyFromPassphrase(passphraseInput)
+                            val derived = CryptoEngine.deriveKeyFromPassphrase(newPassphrase)
                             onSaveKey(derived)
-                            successMessage = "New key derived from passphrase and saved!"
-                            passphraseInput = ""
-                            confirmInput = ""
+                            successMessage = "New master key derived and saved!"
+                            newPassphrase = ""
+                            confirmNewPassphrase = ""
                             understood = false
                         }
                     },
-                    enabled = passphraseInput.isNotBlank() && confirmInput.isNotBlank() && understood,
+                    enabled = newPassphrase.isNotBlank() && confirmNewPassphrase.isNotBlank() && understood,
                     modifier = Modifier.fillMaxWidth(),
                     colors = ButtonDefaults.buttonColors(containerColor = TerminalCyan, contentColor = TerminalBlack)
                 ) {
-                    Text("Derive & Set Key", fontFamily = MonospaceFontFamily)
+                    Text("Derive & Set Key", fontFamily = MonospaceFontFamily, fontWeight = FontWeight.Bold, fontSize = 11.sp)
                 }
 
                 Spacer(modifier = Modifier.height(12.dp))
-                HorizontalDivider(color = TerminalBorder, thickness = 1.dp)
+                HorizontalDivider(color = MaterialTheme.colorScheme.outline, thickness = 1.dp)
                 Spacer(modifier = Modifier.height(12.dp))
 
-                // Option B: Import Existing Key
+                // OPTION 3: Import Raw Base64 Key
                 Text(
-                    text = "OPTION B: IMPORT SAVED BASE64 KEY",
-                    color = TerminalCyan,
+                    text = "3. IMPORT RAW BASE64 KEY",
+                    color = TerminalAmber,
                     fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
                     fontFamily = MonospaceFontFamily
                 )
                 Spacer(modifier = Modifier.height(6.dp))
@@ -314,12 +345,10 @@ fun KeysDialog(
                     label = { Text("Paste 44-char Base64 Key", fontSize = 11.sp, fontFamily = MonospaceFontFamily) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
-                    textStyle = TextStyle(color = TerminalTextPrimary, fontSize = 11.sp, fontFamily = MonospaceFontFamily),
+                    textStyle = TextStyle(color = MaterialTheme.colorScheme.onSurface, fontSize = 11.sp, fontFamily = MonospaceFontFamily),
                     colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = TerminalMint,
-                        unfocusedBorderColor = TerminalBorder,
-                        focusedLabelColor = TerminalMint,
-                        unfocusedLabelColor = TerminalTextSecondary
+                        focusedBorderColor = MaterialTheme.colorScheme.primary,
+                        unfocusedBorderColor = MaterialTheme.colorScheme.outline
                     )
                 )
 
@@ -329,7 +358,7 @@ fun KeysDialog(
                         val trimmed = inputKey.trim()
                         if (CryptoEngine.isValidKey(trimmed)) {
                             onSaveKey(trimmed)
-                            successMessage = "Imported master key successfully!"
+                            successMessage = "Imported Base64 master key successfully!"
                             inputKey = ""
                         } else {
                             errorMessage = "Invalid key! Must be a valid 256-bit Base64 key."
@@ -337,9 +366,9 @@ fun KeysDialog(
                     },
                     enabled = inputKey.isNotBlank(),
                     modifier = Modifier.fillMaxWidth(),
-                    colors = ButtonDefaults.buttonColors(containerColor = TerminalMint, contentColor = TerminalBlack)
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.surfaceVariant, contentColor = MaterialTheme.colorScheme.onSurface)
                 ) {
-                    Text("Import & Apply Key", fontFamily = MonospaceFontFamily)
+                    Text("Import Base64 Key", fontFamily = MonospaceFontFamily, fontSize = 11.sp)
                 }
 
                 if (errorMessage != null) {
@@ -349,7 +378,7 @@ fun KeysDialog(
 
                 if (successMessage != null) {
                     Spacer(modifier = Modifier.height(6.dp))
-                    Text(text = successMessage!!, color = TerminalMint, fontSize = 10.sp, fontFamily = MonospaceFontFamily)
+                    Text(text = successMessage!!, color = MaterialTheme.colorScheme.primary, fontSize = 10.sp, fontFamily = MonospaceFontFamily)
                 }
 
                 Spacer(modifier = Modifier.height(12.dp))
@@ -357,10 +386,10 @@ fun KeysDialog(
                 OutlinedButton(
                     onClick = onDismiss,
                     modifier = Modifier.fillMaxWidth(),
-                    colors = ButtonDefaults.outlinedButtonColors(contentColor = TerminalTextSecondary),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, TerminalBorder)
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.onSurfaceVariant),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
                 ) {
-                    Text("Close", fontFamily = MonospaceFontFamily)
+                    Text("Close", fontFamily = MonospaceFontFamily, fontSize = 11.sp)
                 }
             }
         }
