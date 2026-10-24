@@ -187,7 +187,15 @@ class SyncManager(private val context: Context) {
             val masterKey = prefs.getOrGenerateMasterKey()
             val journalKey = if (isEncrypted) keyFingerprint(masterKey) else ""
 
-            onLog(TerminalLog(level = LogLevel.INFO, message = if (isForceFullBackup) "Starting FULL BACKUP..." else "Starting DIFFERENTIAL SYNC..."))
+            val latestSnapshot = db.snapshotDao().getLatestSnapshot()
+            var effectiveFullBackup = isForceFullBackup
+
+            if (!effectiveFullBackup && latestSnapshot == null) {
+                onLog(TerminalLog(level = LogLevel.WARN, message = "No previous cloud backup found. Establishing initial full backup..."))
+                effectiveFullBackup = true
+            }
+
+            onLog(TerminalLog(level = LogLevel.INFO, message = if (effectiveFullBackup) "Starting FULL BACKUP..." else "Starting DIFFERENTIAL SYNC..."))
             onLog(TerminalLog(level = LogLevel.PLAIN, message = "Target: $folderName | Encrypted: $isEncrypted"))
 
             val diff = calculateDiff(onLog)
@@ -195,6 +203,12 @@ class SyncManager(private val context: Context) {
                 level = LogLevel.INFO,
                 message = "Diff: ${diff.addedCount} added, ${diff.modifiedCount} modified, ${diff.unchangedCount} unchanged, ${diff.deletedCount} deleted (${formatSize(diff.bytesToUpload)} to upload)"
             ))
+
+            // If differential sync has zero modifications/additions/deletions, skip redundant upload
+            if (!effectiveFullBackup && diff.addedCount == 0 && diff.modifiedCount == 0 && diff.deletedCount == 0) {
+                onLog(TerminalLog(level = LogLevel.OK, message = "Nothing to Sync, already up to date."))
+                return@runCatching ManifestManager.json.decodeFromString<SnapshotManifest>(latestSnapshot!!.rawJson)
+            }
 
             if (dryRun) {
                 onLog(TerminalLog(level = LogLevel.WARN, message = "[DRY-RUN] No files were uploaded."))
@@ -216,7 +230,7 @@ class SyncManager(private val context: Context) {
             }
 
             val filesToUpload = diff.items.filter {
-                isForceFullBackup || it.status == DiffStatus.ADDED || it.status == DiffStatus.MODIFIED
+                effectiveFullBackup || it.status == DiffStatus.ADDED || it.status == DiffStatus.MODIFIED
             }
 
             val uploadedFileEntries = mutableListOf<FileEntry>()
@@ -256,7 +270,7 @@ class SyncManager(private val context: Context) {
             }
 
             // Carry over unchanged files if this was incremental sync
-            if (!isForceFullBackup) {
+            if (!effectiveFullBackup) {
                 for (item in diff.items) {
                     if (item.status == DiffStatus.UNCHANGED && item.remoteEntry != null) {
                         uploadedFileEntries.add(item.remoteEntry)

@@ -1,0 +1,7 @@
+name = "teleback-feedback-bot"
+main = "worker.js"
+compatibility_date = "2024-10-01"
+
+# Environment variables that can be committed safely (or overridden by Cloudflare secrets)
+[vars]
+# DO NOT place BOT_TOKEN here. Use: wrangler secret put BOT_TOKEN

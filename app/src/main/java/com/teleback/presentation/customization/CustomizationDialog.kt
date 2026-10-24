@@ -40,9 +40,7 @@ import com.teleback.presentation.theme.ThemeMode
 @Composable
 fun CustomizationDialog(
     currentThemeId: String,
-    currentIconId: String,
     onSelectTheme: (String) -> Unit,
-    onSelectIcon: (String) -> Unit,
     onDismiss: () -> Unit
 ) {
     val activeTheme = TeleBackThemeId.fromId(currentThemeId)
@@ -179,48 +177,7 @@ fun CustomizationDialog(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(14.dp))
-                HorizontalDivider(color = colorScheme.outline, thickness = 1.dp)
-                Spacer(modifier = Modifier.height(14.dp))
-
-                // Section 3: App Icons (Icon B as Default)
-                Text(
-                    text = "APP ICONS (3 Modern Designs)",
-                    color = colorScheme.primary,
-                    fontSize = 11.sp,
-                    fontFamily = MonospaceFontFamily
-                )
-                Spacer(modifier = Modifier.height(6.dp))
-
-                IconOptionRow(
-                    id = "icon_b",
-                    name = "Icon B: Dual-Orbit Sync (Default)",
-                    description = "Electric mint & cyan orbit ring with paper plane",
-                    isSelected = currentIconId == "icon_b" || currentIconId == "",
-                    onSelect = { onSelectIcon("icon_b") }
-                )
-
-                Spacer(modifier = Modifier.height(4.dp))
-
-                IconOptionRow(
-                    id = "icon_a",
-                    name = "Icon A: Neon Terminal Shield",
-                    description = "Cyan security contour with matrix mint chevron >_",
-                    isSelected = currentIconId == "icon_a",
-                    onSelect = { onSelectIcon("icon_a") }
-                )
-
-                Spacer(modifier = Modifier.height(4.dp))
-
-                IconOptionRow(
-                    id = "icon_c",
-                    name = "Icon C: Monolithic Vault",
-                    description = "Isometric wireframe data cube with amber status LED",
-                    isSelected = currentIconId == "icon_c",
-                    onSelect = { onSelectIcon("icon_c") }
-                )
-
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(18.dp))
 
                 Button(
                     onClick = onDismiss,
@@ -234,59 +191,5 @@ fun CustomizationDialog(
                 }
             }
         }
-    }
-}
-
-@Composable
-private fun IconOptionRow(
-    id: String,
-    name: String,
-    description: String,
-    isSelected: Boolean,
-    onSelect: () -> Unit
-) {
-    val colorScheme = MaterialTheme.colorScheme
-
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(4.dp))
-            .background(if (isSelected) colorScheme.surfaceVariant else Color.Transparent)
-            .border(
-                width = 1.dp,
-                color = if (isSelected) colorScheme.primary else colorScheme.outline,
-                shape = RoundedCornerShape(4.dp)
-            )
-            .clickable(onClick = onSelect)
-            .padding(8.dp)
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = name,
-                color = if (isSelected) colorScheme.primary else colorScheme.onSurface,
-                fontSize = 11.sp,
-                fontFamily = MonospaceFontFamily
-            )
-            if (isSelected) {
-                Text(
-                    text = "SELECTED",
-                    color = colorScheme.primary,
-                    fontSize = 9.sp,
-                    fontFamily = MonospaceFontFamily
-                )
-            }
-        }
-        Spacer(modifier = Modifier.height(2.dp))
-        Text(
-            text = description,
-            color = colorScheme.onSurfaceVariant,
-            fontSize = 9.sp,
-            lineHeight = 13.sp,
-            fontFamily = MonospaceFontFamily
-        )
     }
 }

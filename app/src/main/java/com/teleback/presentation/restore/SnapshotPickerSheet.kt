@@ -21,6 +21,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
@@ -128,19 +129,12 @@ fun SnapshotPickerSheet(
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     Text(
-                                        text = snap.snapshotId,
+                                        text = snap.tag?.let { "[$it] ${snap.snapshotId}" } ?: snap.snapshotId,
                                         color = TerminalMint,
                                         fontSize = 12.sp,
+                                        fontWeight = FontWeight.Bold,
                                         fontFamily = MonospaceFontFamily
                                     )
-                                    if (snap.tag != null) {
-                                        Text(
-                                            text = "[${snap.tag}]",
-                                            color = TerminalPurple,
-                                            fontSize = 10.sp,
-                                            fontFamily = MonospaceFontFamily
-                                        )
-                                    }
                                 }
 
                                 Spacer(modifier = Modifier.height(2.dp))

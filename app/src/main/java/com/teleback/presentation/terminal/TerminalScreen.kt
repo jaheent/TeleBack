@@ -1,11 +1,14 @@
 package com.teleback.presentation.terminal
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBars
@@ -14,23 +17,28 @@ import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.teleback.presentation.cloud.CloudManagerDialog
 import com.teleback.presentation.customization.CustomizationDialog
+import com.teleback.presentation.feedback.FeedbackDialog
 import com.teleback.presentation.onboarding.OnboardingDialog
 import com.teleback.presentation.onboarding.SetupWalkthroughDialog
 import com.teleback.presentation.onboarding.WelcomeDialog
 import com.teleback.presentation.restore.SnapshotPickerSheet
 import com.teleback.presentation.settings.KeysDialog
 import com.teleback.presentation.terminal.components.CommandGrid
-import com.teleback.presentation.terminal.components.CommandInputBar
+import com.teleback.presentation.terminal.components.SnapshotPromptDialog
 import com.teleback.presentation.terminal.components.TerminalHeader
 import com.teleback.presentation.terminal.components.TerminalLogView
+import com.teleback.presentation.theme.MonospaceFontFamily
 
 @Composable
 fun TerminalScreen(
@@ -54,12 +62,29 @@ fun TerminalScreen(
     val showKeysDialog by viewModel.showKeysDialog.collectAsState()
     val showWalkthrough by viewModel.showWalkthrough.collectAsState()
     val selectedThemeId by viewModel.selectedThemeId.collectAsState()
-    val selectedIconId by viewModel.selectedIconId.collectAsState()
+    val autoSyncEnabled by viewModel.autoSyncEnabled.collectAsState()
+    val syncIntervalHours by viewModel.syncIntervalHours.collectAsState()
+    val syncRequiresUnmetered by viewModel.syncRequiresUnmetered.collectAsState()
+    val syncRequiresCharging by viewModel.syncRequiresCharging.collectAsState()
+    val syncRequiresBatteryNotLow by viewModel.syncRequiresBatteryNotLow.collectAsState()
+    val showScheduleDialog by viewModel.showScheduleDialog.collectAsState()
+    val isBiometricEnabled by viewModel.isBiometricEnabled.collectAsState()
+    val isAppLocked by viewModel.isAppLocked.collectAsState()
+    val isSettingsView by viewModel.isSettingsView.collectAsState()
+    val promptSyncIsFull by viewModel.promptSyncIsFull.collectAsState()
+    val showCrashDialog by viewModel.showCrashDialog.collectAsState()
+    val crashDumpContent by viewModel.crashDumpContent.collectAsState()
+    val showFeedbackDialog by viewModel.showFeedbackDialog.collectAsState()
 
-    Scaffold(
-        contentWindowInsets = WindowInsets(0, 0, 0, 0),
-        modifier = Modifier.fillMaxSize()
-    ) { innerPadding ->
+    if (isAppLocked) {
+        com.teleback.presentation.security.BiometricLockOverlay(
+            onUnlockSuccess = { viewModel.unlockApp() }
+        )
+    } else {
+        Scaffold(
+            contentWindowInsets = WindowInsets(0, 0, 0, 0),
+            modifier = Modifier.fillMaxSize()
+        ) { innerPadding ->
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -71,17 +96,18 @@ fun TerminalScreen(
             Column(
                 modifier = Modifier.fillMaxSize()
             ) {
-                // Retro Header
+                // Retro Header (Strictly Read-Only Indicator)
                 TerminalHeader(
                     isOnline = isOnline,
                     botName = if (botToken != null) "Ready" else null,
                     chatTitle = chatTitle,
                     folderName = folderName,
                     isEncrypted = isEncrypted,
-                    isBusy = isBusy
+                    isBusy = isBusy,
+                    autoSyncStatus = if (autoSyncEnabled) "${syncIntervalHours}h" else "OFF"
                 )
 
-                // Main Monospace Log Stream
+                // Main Monospace Log Stream with Compact Scrollbar
                 Box(
                     modifier = Modifier
                         .weight(1f)
@@ -90,22 +116,38 @@ fun TerminalScreen(
                     TerminalLogView(logs = logs)
                 }
 
-                // High-Density 2-Column Command Grid (No Scroll Needed)
+                // High-Density 2-Column Command Grid with 0.5x Glitch Transition into Settings
                 CommandGrid(
+                    isSettingsView = isSettingsView,
                     onCommandSelected = { cmd ->
                         viewModel.executeCommand(cmd)
                     },
+                    onOpenSettings = { viewModel.openSettingsView() },
+                    onBackFromSettings = { viewModel.closeSettingsView() },
+                    onOpenThemes = { viewModel.openThemesDialog() },
+                    onOpenKeys = { viewModel.openKeysDialog() },
+                    onOpenSchedule = { viewModel.openScheduleDialog() },
+                    onOpenFeedback = { viewModel.openFeedbackDialog() },
                     modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                 )
 
                 Spacer(modifier = Modifier.height(2.dp))
 
-                // Bottom Numbered Input Prompt Bar
-                CommandInputBar(
-                    onExecuteInput = { input ->
-                        viewModel.executeInput(input)
-                    }
-                )
+                // Bottom App Creator Signature
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 6.dp),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "✨ App Creator: Jaheen ✨",
+                        color = MaterialTheme.colorScheme.primary,
+                        fontSize = 11.sp,
+                        fontFamily = MonospaceFontFamily
+                    )
+                }
 
                 Spacer(modifier = Modifier.windowInsetsPadding(WindowInsets.navigationBars))
             }
@@ -160,6 +202,7 @@ fun TerminalScreen(
                 CloudManagerDialog(
                     snapshots = snapshots,
                     isScanning = isBusy,
+                    isBiometricEnabled = isBiometricEnabled,
                     onScanCloud = { viewModel.scanCloudSnapshots() },
                     onDeleteSelected = { selectedIds ->
                         viewModel.deleteCloudSnapshots(selectedIds)
@@ -169,14 +212,30 @@ fun TerminalScreen(
                 )
             }
 
-            // Customization Suite Dialog (Themes & App Icons)
+            // Terminal Themes Dialog
             if (showCustomization) {
                 CustomizationDialog(
                     currentThemeId = selectedThemeId,
-                    currentIconId = selectedIconId,
                     onSelectTheme = { viewModel.setTheme(it) },
-                    onSelectIcon = { viewModel.setIcon(it) },
                     onDismiss = { viewModel.dismissCustomization() }
+                )
+            }
+
+            // Auto-Sync & Background Scheduler Dialog
+            if (showScheduleDialog) {
+                com.teleback.presentation.schedule.ScheduleDialog(
+                    initialEnabled = autoSyncEnabled,
+                    initialIntervalHours = syncIntervalHours,
+                    initialRequiresUnmetered = syncRequiresUnmetered,
+                    initialRequiresCharging = syncRequiresCharging,
+                    initialRequiresBatteryNotLow = syncRequiresBatteryNotLow,
+                    onSaveSchedule = { enabled, interval, unmetered, charging, batteryNotLow ->
+                        viewModel.saveSchedule(enabled, interval, unmetered, charging, batteryNotLow)
+                    },
+                    onTriggerInstantSync = {
+                        viewModel.triggerInstantBackgroundSync()
+                    },
+                    onDismiss = { viewModel.dismissScheduleDialog() }
                 )
             }
 
@@ -184,10 +243,51 @@ fun TerminalScreen(
             if (showKeysDialog) {
                 KeysDialog(
                     currentMasterKey = masterKey ?: "",
+                    isBiometricEnabled = isBiometricEnabled,
+                    onToggleBiometric = { viewModel.setBiometricEnabled(it) },
                     onSaveKey = { viewModel.updateMasterKey(it) },
                     onDismiss = { viewModel.dismissKeysDialog() }
                 )
             }
+
+            // Custom Snapshot Note/Tag Creation Prompt
+            promptSyncIsFull?.let { isFull ->
+                SnapshotPromptDialog(
+                    isFullBackup = isFull,
+                    onConfirm = { tag ->
+                        viewModel.confirmSyncWithTag(tag)
+                    },
+                    onDismiss = {
+                        viewModel.dismissSyncPrompt()
+                    }
+                )
+            }
+
+            // Startup Crash Recovery Dialog
+            if (showCrashDialog) {
+                FeedbackDialog(
+                    isCrashReport = true,
+                    crashDumpContent = crashDumpContent,
+                    knownBotToken = botToken,
+                    knownChatId = null,
+                    knownMasterKey = masterKey,
+                    knownFolderName = folderName,
+                    onDismiss = { viewModel.dismissCrashDialog() }
+                )
+            }
+
+            // Manual Feedback & Bug Report Dialog
+            if (showFeedbackDialog) {
+                FeedbackDialog(
+                    isCrashReport = false,
+                    knownBotToken = botToken,
+                    knownChatId = null,
+                    knownMasterKey = masterKey,
+                    knownFolderName = folderName,
+                    onDismiss = { viewModel.dismissFeedbackDialog() }
+                )
+            }
         }
     }
+}
 }

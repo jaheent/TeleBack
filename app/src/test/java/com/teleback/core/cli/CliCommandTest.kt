@@ -13,9 +13,8 @@ class CliCommandTest {
         assertEquals(CliCommand.CLOUD, CliCommand.resolve("4"))
         assertEquals(CliCommand.STATUS, CliCommand.resolve("5"))
         assertEquals(CliCommand.TEST, CliCommand.resolve("6"))
-        assertEquals(CliCommand.CUSTOM, CliCommand.resolve("7"))
-        assertEquals(CliCommand.KEYS, CliCommand.resolve("8"))
-        assertEquals(CliCommand.CLEAR, CliCommand.resolve("9"))
+        assertEquals(CliCommand.CLEAR, CliCommand.resolve("7"))
+        assertEquals(CliCommand.SETTINGS, CliCommand.resolve("8"))
         assertEquals(CliCommand.SETUP, CliCommand.resolve("0"))
     }
 
@@ -30,10 +29,10 @@ class CliCommandTest {
         assertEquals(CliCommand.CLOUD, CliCommand.resolve("snaps"))
         assertEquals(CliCommand.STATUS, CliCommand.resolve("diff"))
         assertEquals(CliCommand.TEST, CliCommand.resolve("ping"))
-        assertEquals(CliCommand.CUSTOM, CliCommand.resolve("custom"))
-        assertEquals(CliCommand.CUSTOM, CliCommand.resolve("theme"))
-        assertEquals(CliCommand.KEYS, CliCommand.resolve("keys"))
         assertEquals(CliCommand.CLEAR, CliCommand.resolve("clear"))
+        assertEquals(CliCommand.CLEAR, CliCommand.resolve("cls"))
+        assertEquals(CliCommand.SETTINGS, CliCommand.resolve("settings"))
+        assertEquals(CliCommand.SETTINGS, CliCommand.resolve("options"))
         assertEquals(CliCommand.SETUP, CliCommand.resolve("setup"))
         assertEquals(CliCommand.SETUP, CliCommand.resolve("init"))
     }

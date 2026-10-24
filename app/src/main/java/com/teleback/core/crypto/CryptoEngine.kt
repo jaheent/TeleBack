@@ -23,20 +23,44 @@ object CryptoEngine {
         val keyGen = KeyGenerator.getInstance(ALGORITHM)
         keyGen.init(KEY_SIZE, SecureRandom())
         val secretKey = keyGen.generateKey()
-        return Base64.getEncoder().encodeToString(secretKey.encoded)
+        val encoded = secretKey.encoded
+        val result = Base64.getEncoder().encodeToString(encoded)
+        zeroize(encoded)
+        return result
     }
 
     fun deriveKeyFromPassphrase(passphrase: String, salt: String = "teleback_cloud_salt_v1"): String {
         val factory = javax.crypto.SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256")
-        val spec = javax.crypto.spec.PBEKeySpec(passphrase.toCharArray(), salt.toByteArray(Charsets.UTF_8), 100_000, 256)
+        val chars = passphrase.toCharArray()
+        val saltBytes = salt.toByteArray(Charsets.UTF_8)
+        val spec = javax.crypto.spec.PBEKeySpec(chars, saltBytes, 100_000, 256)
         val secretKey = factory.generateSecret(spec)
-        return Base64.getEncoder().encodeToString(secretKey.encoded)
+        val encoded = secretKey.encoded
+        val result = Base64.getEncoder().encodeToString(encoded)
+        zeroize(chars)
+        zeroize(encoded)
+        spec.clearPassword()
+        return result
+    }
+
+    fun zeroize(bytes: ByteArray?) {
+        if (bytes != null) {
+            java.util.Arrays.fill(bytes, 0.toByte())
+        }
+    }
+
+    fun zeroize(chars: CharArray?) {
+        if (chars != null) {
+            java.util.Arrays.fill(chars, '\u0000')
+        }
     }
 
     fun isValidKey(keyBase64: String): Boolean {
         return try {
             val decoded = Base64.getDecoder().decode(keyBase64.trim())
-            decoded.size == 32
+            val isValid = decoded.size == 32
+            zeroize(decoded)
+            isValid
         } catch (e: Exception) {
             false
         }
@@ -44,7 +68,9 @@ object CryptoEngine {
 
     private fun getSecretKey(keyBase64: String): SecretKey {
         val decoded = Base64.getDecoder().decode(keyBase64)
-        return SecretKeySpec(decoded, ALGORITHM)
+        val spec = SecretKeySpec(decoded, ALGORITHM)
+        zeroize(decoded)
+        return spec
     }
 
     fun encryptBytes(data: ByteArray, keyBase64: String): ByteArray {
@@ -100,15 +126,25 @@ object CryptoEngine {
 
     fun encryptStream(input: InputStream, output: OutputStream, keyBase64: String) {
         val allBytes = input.readBytes()
-        val encrypted = encryptBytes(allBytes, keyBase64)
-        output.write(encrypted)
-        output.flush()
+        try {
+            val encrypted = encryptBytes(allBytes, keyBase64)
+            output.write(encrypted)
+            output.flush()
+        } finally {
+            zeroize(allBytes)
+        }
     }
 
     fun decryptStream(input: InputStream, output: OutputStream, keyBase64: String) {
         val allBytes = input.readBytes()
-        val decrypted = decryptBytes(allBytes, keyBase64)
-        output.write(decrypted)
-        output.flush()
+        var decrypted: ByteArray? = null
+        try {
+            decrypted = decryptBytes(allBytes, keyBase64)
+            output.write(decrypted)
+            output.flush()
+        } finally {
+            zeroize(allBytes)
+            zeroize(decrypted)
+        }
     }
 }

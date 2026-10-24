@@ -40,7 +40,16 @@ class TerminalViewModel(application: Application) : AndroidViewModel(application
     val snapshots = db.snapshotDao().getAllSnapshots().stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
     val selectedThemeId = prefs.selectedThemeId.stateIn(viewModelScope, SharingStarted.Eagerly, "dark_green")
-    val selectedIconId = prefs.selectedIconId.stateIn(viewModelScope, SharingStarted.Eagerly, "icon_b")
+
+    val autoSyncEnabled = prefs.autoSyncEnabled.stateIn(viewModelScope, SharingStarted.Eagerly, false)
+    val syncIntervalHours = prefs.syncIntervalHours.stateIn(viewModelScope, SharingStarted.Eagerly, 6)
+    val syncRequiresUnmetered = prefs.syncRequiresUnmetered.stateIn(viewModelScope, SharingStarted.Eagerly, true)
+    val syncRequiresCharging = prefs.syncRequiresCharging.stateIn(viewModelScope, SharingStarted.Eagerly, false)
+    val syncRequiresBatteryNotLow = prefs.syncRequiresBatteryNotLow.stateIn(viewModelScope, SharingStarted.Eagerly, true)
+    val isBiometricEnabled = prefs.isBiometricEnabled.stateIn(viewModelScope, SharingStarted.Eagerly, false)
+
+    private val _isAppLocked = MutableStateFlow(false)
+    val isAppLocked: StateFlow<Boolean> = _isAppLocked.asStateFlow()
 
     private val _logs = MutableStateFlow<List<TerminalLog>>(emptyList())
     val logs: StateFlow<List<TerminalLog>> = _logs.asStateFlow()
@@ -63,15 +72,118 @@ class TerminalViewModel(application: Application) : AndroidViewModel(application
     private val _showCustomization = MutableStateFlow(false)
     val showCustomization: StateFlow<Boolean> = _showCustomization.asStateFlow()
 
+    private val _showScheduleDialog = MutableStateFlow(false)
+    val showScheduleDialog: StateFlow<Boolean> = _showScheduleDialog.asStateFlow()
+
     private val _showKeysDialog = MutableStateFlow(false)
     val showKeysDialog: StateFlow<Boolean> = _showKeysDialog.asStateFlow()
 
     private val _showWalkthrough = MutableStateFlow(false)
     val showWalkthrough: StateFlow<Boolean> = _showWalkthrough.asStateFlow()
 
+    private val _isSettingsView = MutableStateFlow(false)
+    val isSettingsView: StateFlow<Boolean> = _isSettingsView.asStateFlow()
+
+    private val _promptSyncIsFull = MutableStateFlow<Boolean?>(null)
+    val promptSyncIsFull: StateFlow<Boolean?> = _promptSyncIsFull.asStateFlow()
+
+    private val _showCrashDialog = MutableStateFlow(false)
+    val showCrashDialog: StateFlow<Boolean> = _showCrashDialog.asStateFlow()
+
+    private val _crashDumpContent = MutableStateFlow<String?>(null)
+    val crashDumpContent: StateFlow<String?> = _crashDumpContent.asStateFlow()
+
+    private val _showFeedbackDialog = MutableStateFlow(false)
+    val showFeedbackDialog: StateFlow<Boolean> = _showFeedbackDialog.asStateFlow()
+
+    fun openSettingsView() {
+        _isSettingsView.value = true
+        addLog(TerminalLog(level = LogLevel.CMD, message = "[SETTINGS] Switched to Settings menu."))
+    }
+
+    fun closeSettingsView() {
+        _isSettingsView.value = false
+        addLog(TerminalLog(level = LogLevel.CMD, message = "[TERMINAL] Returned to main console."))
+    }
+
+    fun openThemesDialog() {
+        _showCustomization.value = true
+    }
+
+    fun openKeysDialog() {
+        _showKeysDialog.value = true
+    }
+
+    fun openFeedbackDialog() {
+        _showFeedbackDialog.value = true
+    }
+
+    fun dismissFeedbackDialog() {
+        _showFeedbackDialog.value = false
+    }
+
+    fun dismissCrashDialog() {
+        _showCrashDialog.value = false
+        _crashDumpContent.value = null
+        com.teleback.core.diagnostics.CrashHandler.clearCrashDump(getApplication())
+    }
+
+    fun requestSyncPrompt(isFull: Boolean) {
+        _promptSyncIsFull.value = isFull
+    }
+
+    fun dismissSyncPrompt() {
+        _promptSyncIsFull.value = null
+    }
+
+    fun confirmSyncWithTag(tag: String?) {
+        val isFull = _promptSyncIsFull.value ?: false
+        _promptSyncIsFull.value = null
+        runSync(isFull = isFull, tag = tag)
+    }
+
     init {
         printBanner()
         checkFirstRunWelcome()
+        checkBiometricLock()
+        checkCrashDump()
+    }
+
+    private fun checkCrashDump() {
+        val app = getApplication<Application>()
+        if (com.teleback.core.diagnostics.CrashHandler.hasCrashDump(app)) {
+            val dump = com.teleback.core.diagnostics.CrashHandler.getCrashDump(app)
+            if (!dump.isNullOrBlank()) {
+                _crashDumpContent.value = dump
+                _showCrashDialog.value = true
+            }
+        }
+    }
+
+    private fun checkBiometricLock() {
+        viewModelScope.launch {
+            if (prefs.isBiometricEnabled.first()) {
+                _isAppLocked.value = true
+            }
+        }
+    }
+
+    fun unlockApp() {
+        _isAppLocked.value = false
+    }
+
+    fun lockApp() {
+        _isAppLocked.value = true
+    }
+
+    fun setBiometricEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            prefs.setBiometricEnabled(enabled)
+            addLog(TerminalLog(
+                level = LogLevel.OK,
+                message = if (enabled) "[SECURITY] Biometric Sentinel enabled (Biometrics/PIN guarded)." else "[SECURITY] Biometric Sentinel disabled."
+            ))
+        }
     }
 
     private fun checkFirstRunWelcome() {
@@ -98,20 +210,63 @@ class TerminalViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
+    fun openScheduleDialog() {
+        _showScheduleDialog.value = true
+    }
+
+    fun dismissScheduleDialog() {
+        _showScheduleDialog.value = false
+    }
+
+    fun saveSchedule(
+        enabled: Boolean,
+        intervalHours: Int,
+        unmetered: Boolean,
+        charging: Boolean,
+        batteryNotLow: Boolean
+    ) {
+        viewModelScope.launch {
+            prefs.saveAutoSyncSettings(enabled, intervalHours, unmetered, charging, batteryNotLow)
+            val context = getApplication<Application>()
+            if (enabled) {
+                com.teleback.core.service.SyncWorkScheduler.schedulePeriodicSync(
+                    context = context,
+                    intervalHours = intervalHours,
+                    requiresUnmetered = unmetered,
+                    requiresCharging = charging,
+                    requiresBatteryNotLow = batteryNotLow
+                )
+                addLog(TerminalLog(level = LogLevel.OK, message = "[SCHED] Periodic auto-sync enabled (Every ${intervalHours}h)."))
+            } else {
+                com.teleback.core.service.SyncWorkScheduler.cancelPeriodicSync(context)
+                addLog(TerminalLog(level = LogLevel.INFO, message = "[SCHED] Periodic auto-sync disabled."))
+            }
+        }
+    }
+
+    fun triggerInstantBackgroundSync() {
+        viewModelScope.launch {
+            val context = getApplication<Application>()
+            com.teleback.core.service.SyncWorkScheduler.enqueueOneTimeSync(context)
+            addLog(TerminalLog(level = LogLevel.INFO, message = "[SCHED] Instant background sync enqueued with WorkManager."))
+        }
+    }
+
     private fun printBanner() {
         val banner = listOf(
             TerminalLog(level = LogLevel.PLAIN, message = "=================================================="),
-            TerminalLog(level = LogLevel.OK,    message = " TeleBack v1.0 — Decentralized Telegram Cloud Storage"),
+            TerminalLog(level = LogLevel.OK,    message = " TeleBack v${com.teleback.BuildConfig.VERSION_NAME} — Decentralized Telegram Cloud Storage"),
             TerminalLog(level = LogLevel.INFO,  message = " Target: Android 15+ | Zero-Signup | AES-256-GCM"),
             TerminalLog(level = LogLevel.PLAIN, message = "=================================================="),
-            TerminalLog(level = LogLevel.INFO,  message = "Type a number [1-0] or tap a 2-column chip to run."),
-            TerminalLog(level = LogLevel.PLAIN, message = "Type [0] or 'setup' to configure bot & folder.")
+            TerminalLog(level = LogLevel.INFO,  message = "Type a number [1-8, 0] or tap a 2-column chip to run."),
+            TerminalLog(level = LogLevel.PLAIN, message = "Tap [8] for Settings, [0] or 'setup' for config wizard.")
         )
         _logs.value = banner
     }
 
     fun addLog(log: TerminalLog) {
         _logs.value = _logs.value + log
+        com.teleback.core.diagnostics.CrashHandler.recordLog("[${log.level.tag}] ${log.message}")
     }
 
     fun executeInput(input: String) {
@@ -122,6 +277,59 @@ class TerminalViewModel(application: Application) : AndroidViewModel(application
 
         if (trimmed.equals("help", ignoreCase = true) || trimmed == "?") {
             showHelp()
+            return
+        }
+
+        // Settings sub-view context handling
+        if (_isSettingsView.value) {
+            when (trimmed.lowercase()) {
+                "1", "theme", "themes", "custom" -> {
+                    _showCustomization.value = true
+                    return
+                }
+                "2", "keys", "key", "crypto" -> {
+                    _showKeysDialog.value = true
+                    return
+                }
+                "3", "auto", "schedule", "sched", "cron" -> {
+                    _showScheduleDialog.value = true
+                    return
+                }
+                "4", "report", "feedback", "bug" -> {
+                    _showFeedbackDialog.value = true
+                    return
+                }
+                "<", "back", "exit", "q" -> {
+                    closeSettingsView()
+                    return
+                }
+            }
+        }
+
+        if (trimmed.equals("back", ignoreCase = true) || trimmed.equals("exit", ignoreCase = true) || trimmed == "<") {
+            if (_isSettingsView.value) {
+                closeSettingsView()
+                return
+            }
+        }
+
+        if (trimmed.equals("report", ignoreCase = true) || trimmed.equals("feedback", ignoreCase = true) || trimmed.equals("bug", ignoreCase = true)) {
+            _showFeedbackDialog.value = true
+            return
+        }
+
+        if (trimmed.equals("schedule", ignoreCase = true) || trimmed.equals("cron", ignoreCase = true) || trimmed.equals("auto", ignoreCase = true)) {
+            _showScheduleDialog.value = true
+            return
+        }
+
+        if (trimmed.equals("theme", ignoreCase = true) || trimmed.equals("themes", ignoreCase = true) || trimmed.equals("custom", ignoreCase = true)) {
+            _showCustomization.value = true
+            return
+        }
+
+        if (trimmed.equals("keys", ignoreCase = true) || trimmed.equals("key", ignoreCase = true) || trimmed.equals("crypto", ignoreCase = true)) {
+            _showKeysDialog.value = true
             return
         }
 
@@ -136,8 +344,8 @@ class TerminalViewModel(application: Application) : AndroidViewModel(application
 
     fun executeCommand(command: CliCommand, rawInput: String = "") {
         when (command) {
-            CliCommand.SYNC -> runSync(isFull = false)
-            CliCommand.BACKUP -> runSync(isFull = true)
+            CliCommand.SYNC -> requestSyncPrompt(isFull = false)
+            CliCommand.BACKUP -> requestSyncPrompt(isFull = true)
             CliCommand.RESTORE -> {
                 // If user passed a snapshot id: e.g. "3 snap_20261018"
                 val tokens = rawInput.split("\\s+".toRegex())
@@ -152,9 +360,8 @@ class TerminalViewModel(application: Application) : AndroidViewModel(application
             }
             CliCommand.STATUS -> runStatusCheck()
             CliCommand.TEST -> runConnectionTest()
-            CliCommand.CUSTOM -> _showCustomization.value = true
-            CliCommand.KEYS -> _showKeysDialog.value = true
             CliCommand.CLEAR -> _logs.value = emptyList()
+            CliCommand.SETTINGS -> openSettingsView()
             CliCommand.SETUP -> _showWalkthrough.value = true
         }
     }
@@ -168,6 +375,8 @@ class TerminalViewModel(application: Application) : AndroidViewModel(application
         SyncForegroundService.start(getApplication())
 
         viewModelScope.launch {
+            var isSuccess = false
+            var failureMessage: String? = null
             try {
                 val result = syncManager.runBackupOrSync(
                     isForceFullBackup = isFull,
@@ -176,14 +385,25 @@ class TerminalViewModel(application: Application) : AndroidViewModel(application
                     onLog = { addLog(it) }
                 )
                 if (result.isFailure) {
-                    addLog(TerminalLog(level = LogLevel.ERR, message = "Operation failed: ${result.exceptionOrNull()?.message}"))
+                    val msg = result.exceptionOrNull()?.message ?: "Unknown error"
+                    addLog(TerminalLog(level = LogLevel.ERR, message = "Operation failed: $msg"))
+                    failureMessage = msg
+                } else {
+                    isSuccess = true
                 }
             } catch (e: Exception) {
-                addLog(TerminalLog(level = LogLevel.ERR, message = "Error: ${e.message}"))
+                val msg = e.message ?: "Unexpected error"
+                addLog(TerminalLog(level = LogLevel.ERR, message = "Error: $msg"))
+                failureMessage = msg
             } finally {
                 _isBusy.value = false
                 SyncForegroundService.stop(getApplication())
-                NotificationHelper.notifyTaskCompleted(getApplication())
+                val actionName = if (isFull) "Backup" else "Sync"
+                if (isSuccess) {
+                    NotificationHelper.notify(getApplication(), "TeleBack $actionName", "$actionName Completed")
+                } else {
+                    NotificationHelper.notify(getApplication(), "TeleBack $actionName", "$actionName Failed: ${failureMessage ?: "Error"}")
+                }
             }
         }
     }
@@ -197,17 +417,29 @@ class TerminalViewModel(application: Application) : AndroidViewModel(application
         SyncForegroundService.start(getApplication())
 
         viewModelScope.launch {
+            var isSuccess = false
+            var failureMessage: String? = null
             try {
                 val result = syncManager.restoreSnapshot(snapshotId, onLog = { addLog(it) })
                 if (result.isFailure) {
-                    addLog(TerminalLog(level = LogLevel.ERR, message = "Restore failed: ${result.exceptionOrNull()?.message}"))
+                    val msg = result.exceptionOrNull()?.message ?: "Unknown error"
+                    addLog(TerminalLog(level = LogLevel.ERR, message = "Restore failed: $msg"))
+                    failureMessage = msg
+                } else {
+                    isSuccess = true
                 }
             } catch (e: Exception) {
-                addLog(TerminalLog(level = LogLevel.ERR, message = "Restore error: ${e.message}"))
+                val msg = e.message ?: "Unexpected error"
+                addLog(TerminalLog(level = LogLevel.ERR, message = "Restore error: $msg"))
+                failureMessage = msg
             } finally {
                 _isBusy.value = false
                 SyncForegroundService.stop(getApplication())
-                NotificationHelper.notifyTaskCompleted(getApplication())
+                if (isSuccess) {
+                    NotificationHelper.notify(getApplication(), "TeleBack Restore", "Restore Completed")
+                } else {
+                    NotificationHelper.notify(getApplication(), "TeleBack Restore", "Restore Failed: ${failureMessage ?: "Error"}")
+                }
             }
         }
     }
@@ -225,7 +457,6 @@ class TerminalViewModel(application: Application) : AndroidViewModel(application
                 addLog(TerminalLog(level = LogLevel.ERR, message = "Status check failed: ${e.message}"))
             }
             printCloudUsage()
-            NotificationHelper.notifyTaskCompleted(getApplication())
         }
     }
 
@@ -268,7 +499,6 @@ class TerminalViewModel(application: Application) : AndroidViewModel(application
             } else {
                 addLog(TerminalLog(level = LogLevel.ERR, message = "Connection failed: ${result.exceptionOrNull()?.message}"))
             }
-            NotificationHelper.notifyTaskCompleted(getApplication())
         }
     }
 
@@ -325,8 +555,6 @@ class TerminalViewModel(application: Application) : AndroidViewModel(application
                 }
             } catch (e: Exception) {
                 addLog(TerminalLog(level = LogLevel.WARN, message = "Cloud scan notice: ${e.message}"))
-            } finally {
-                NotificationHelper.notifyTaskCompleted(getApplication())
             }
         }
     }
@@ -335,14 +563,6 @@ class TerminalViewModel(application: Application) : AndroidViewModel(application
         viewModelScope.launch {
             prefs.saveThemeId(themeId)
             addLog(TerminalLog(level = LogLevel.OK, message = "Theme switched to '$themeId'."))
-        }
-    }
-
-    fun setIcon(iconId: String) {
-        viewModelScope.launch {
-            prefs.saveIconId(iconId)
-            com.teleback.core.util.IconSwitcher.switchIcon(getApplication(), iconId)
-            addLog(TerminalLog(level = LogLevel.OK, message = "App icon preference set to '$iconId'."))
         }
     }
 
@@ -356,7 +576,6 @@ class TerminalViewModel(application: Application) : AndroidViewModel(application
                 if (result.isSuccess) {
                     addLog(TerminalLog(level = LogLevel.OK, message = "Cloud catalog updated (${result.getOrNull()?.size ?: 0} snapshots total)."))
                 }
-                NotificationHelper.notifyTaskCompleted(getApplication())
             }
         }
     }
@@ -410,7 +629,6 @@ class TerminalViewModel(application: Application) : AndroidViewModel(application
                 }
             } finally {
                 _isBusy.value = false
-                NotificationHelper.notifyTaskCompleted(getApplication())
             }
         }
     }
@@ -426,7 +644,6 @@ class TerminalViewModel(application: Application) : AndroidViewModel(application
                 }
             } finally {
                 _isBusy.value = false
-                NotificationHelper.notifyTaskCompleted(getApplication())
             }
         }
     }
@@ -442,7 +659,6 @@ class TerminalViewModel(application: Application) : AndroidViewModel(application
                 }
             } finally {
                 _isBusy.value = false
-                NotificationHelper.notifyTaskCompleted(getApplication())
             }
         }
     }

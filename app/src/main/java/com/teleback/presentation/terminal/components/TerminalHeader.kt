@@ -2,6 +2,7 @@ package com.teleback.presentation.terminal.components
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -36,6 +37,7 @@ fun TerminalHeader(
     folderName: String?,
     isEncrypted: Boolean,
     isBusy: Boolean,
+    autoSyncStatus: String? = null,
     modifier: Modifier = Modifier
 ) {
     val colorScheme = MaterialTheme.colorScheme
@@ -61,7 +63,7 @@ fun TerminalHeader(
                     letterSpacing = 1.5.sp
                 )
                 Text(
-                    text = " v1.0",
+                    text = " v${com.teleback.BuildConfig.VERSION_NAME}",
                     color = colorScheme.onSurfaceVariant,
                     fontSize = 11.sp
                 )
@@ -114,11 +116,11 @@ fun TerminalHeader(
                 value = folderName ?: "Unset",
                 accentColor = if (folderName != null) colorScheme.primary else TerminalAmber
             )
-            if (isEncrypted) {
+            if (autoSyncStatus != null) {
                 HeaderBadge(
-                    label = "CIPHER",
-                    value = "AES-GCM",
-                    accentColor = colorScheme.primary
+                    label = "AUTO",
+                    value = autoSyncStatus,
+                    accentColor = if (autoSyncStatus == "OFF") colorScheme.onSurfaceVariant else colorScheme.primary
                 )
             }
         }
@@ -129,7 +131,8 @@ fun TerminalHeader(
 private fun HeaderBadge(
     label: String,
     value: String,
-    accentColor: Color
+    accentColor: Color,
+    onClick: (() -> Unit)? = null
 ) {
     val colorScheme = MaterialTheme.colorScheme
 
@@ -138,6 +141,13 @@ private fun HeaderBadge(
             .clip(RoundedCornerShape(4.dp))
             .background(colorScheme.surfaceVariant)
             .border(1.dp, colorScheme.outline, RoundedCornerShape(4.dp))
+            .then(
+                if (onClick != null) {
+                    Modifier.clickable(onClick = onClick)
+                } else {
+                    Modifier
+                }
+            )
             .padding(horizontal = 8.dp, vertical = 3.dp)
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {

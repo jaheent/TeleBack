@@ -29,6 +29,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -45,20 +47,26 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import androidx.fragment.app.FragmentActivity
 import com.teleback.core.crypto.CryptoEngine
+import com.teleback.core.util.BiometricHelper
 import com.teleback.presentation.theme.MonospaceFontFamily
 import com.teleback.presentation.theme.TerminalAmber
 import com.teleback.presentation.theme.TerminalBlack
 import com.teleback.presentation.theme.TerminalCyan
+import com.teleback.presentation.theme.TerminalMint
 import com.teleback.presentation.theme.TerminalRed
 
 @Composable
 fun KeysDialog(
     currentMasterKey: String,
+    isBiometricEnabled: Boolean = false,
+    onToggleBiometric: (Boolean) -> Unit = {},
     onSaveKey: (String) -> Unit,
     onDismiss: () -> Unit
 ) {
     val context = LocalContext.current
+    var isKeyRevealed by remember { mutableStateOf(!isBiometricEnabled) }
     var restorePassphrase by remember { mutableStateOf("") }
     var newPassphrase by remember { mutableStateOf("") }
     var confirmNewPassphrase by remember { mutableStateOf("") }
@@ -104,6 +112,60 @@ fun KeysDialog(
 
                 Spacer(modifier = Modifier.height(10.dp))
 
+                // Biometric Security Toggle Section
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(MaterialTheme.colorScheme.background)
+                        .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(6.dp))
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f).padding(end = 8.dp)) {
+                        Text(
+                            text = "Biometric Vault Security",
+                            color = MaterialTheme.colorScheme.onSurface,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = MonospaceFontFamily
+                        )
+                        Text(
+                            text = if (isBiometricEnabled) "Active: App launch, key export & wipe protected" else "Disabled: No biometric challenge required",
+                            color = if (isBiometricEnabled) TerminalMint else MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontSize = 9.sp,
+                            fontFamily = MonospaceFontFamily
+                        )
+                    }
+
+                    Switch(
+                        checked = isBiometricEnabled,
+                        onCheckedChange = { enable ->
+                            val activity = context as? FragmentActivity
+                            if (activity != null) {
+                                BiometricHelper.authenticate(
+                                    activity = activity,
+                                    title = if (enable) "Enable Biometric Security" else "Disable Biometric Security",
+                                    subtitle = "Confirm identity to update vault security",
+                                    onSuccess = { onToggleBiometric(enable) },
+                                    onError = { errorMessage = it }
+                                )
+                            } else {
+                                onToggleBiometric(enable)
+                            }
+                        },
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = MaterialTheme.colorScheme.primary,
+                            checkedTrackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.3f),
+                            uncheckedThumbColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                            uncheckedTrackColor = MaterialTheme.colorScheme.surface
+                        )
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
                 Text(
                     text = "ACTIVE MASTER KEY (BASE64):",
                     color = TerminalCyan,
@@ -121,7 +183,7 @@ fun KeysDialog(
                         .padding(8.dp)
                 ) {
                     Text(
-                        text = currentMasterKey,
+                        text = if (isKeyRevealed) currentMasterKey else "••••••••••••••••••••••••••••••••••••••••••••",
                         color = MaterialTheme.colorScheme.primary,
                         fontSize = 11.sp,
                         fontFamily = MonospaceFontFamily,
@@ -133,16 +195,40 @@ fun KeysDialog(
 
                 OutlinedButton(
                     onClick = {
-                        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                        val clip = ClipData.newPlainText("TeleBack Master Key", currentMasterKey)
-                        clipboard.setPrimaryClip(clip)
-                        Toast.makeText(context, "Master Key copied to clipboard", Toast.LENGTH_SHORT).show()
+                        val proceedCopy = {
+                            isKeyRevealed = true
+                            val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                            val clip = ClipData.newPlainText("TeleBack Master Key", currentMasterKey)
+                            clipboard.setPrimaryClip(clip)
+                            Toast.makeText(context, "Master Key copied to clipboard", Toast.LENGTH_SHORT).show()
+                        }
+
+                        if (isBiometricEnabled && !isKeyRevealed) {
+                            val activity = context as? FragmentActivity
+                            if (activity != null) {
+                                BiometricHelper.authenticate(
+                                    activity = activity,
+                                    title = "Export Master Key",
+                                    subtitle = "Authenticate to reveal and copy master encryption key",
+                                    onSuccess = proceedCopy,
+                                    onError = { errorMessage = it }
+                                )
+                            } else {
+                                proceedCopy()
+                            }
+                        } else {
+                            proceedCopy()
+                        }
                     },
                     modifier = Modifier.fillMaxWidth(),
                     colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.primary),
                     border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.primary)
                 ) {
-                    Text("Copy Base64 Key to Clipboard", fontFamily = MonospaceFontFamily, fontSize = 11.sp)
+                    Text(
+                        text = if (isBiometricEnabled && !isKeyRevealed) "Authenticate to Reveal & Copy Key" else "Copy Base64 Key to Clipboard",
+                        fontFamily = MonospaceFontFamily,
+                        fontSize = 11.sp
+                    )
                 }
 
                 Spacer(modifier = Modifier.height(12.dp))

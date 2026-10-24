@@ -64,11 +64,13 @@ import java.util.Locale
 fun CloudManagerDialog(
     snapshots: List<SnapshotEntity>,
     isScanning: Boolean,
+    isBiometricEnabled: Boolean = false,
     onScanCloud: () -> Unit,
     onDeleteSelected: (List<String>) -> Unit,
     onWipeAll: () -> Unit,
     onDismiss: () -> Unit
 ) {
+    val context = androidx.compose.ui.platform.LocalContext.current
     val selectedIds = remember { mutableStateListOf<String>() }
     var expandedSnapshotId by remember { mutableStateOf<String?>(null) }
     var showWipeConfirm by remember { mutableStateOf(false) }
@@ -228,7 +230,7 @@ fun CloudManagerDialog(
                                             horizontalArrangement = Arrangement.SpaceBetween
                                         ) {
                                             Text(
-                                                text = snap.snapshotId,
+                                                text = snap.tag?.let { "[$it] ${snap.snapshotId}" } ?: snap.snapshotId,
                                                 color = MaterialTheme.colorScheme.primary,
                                                 fontSize = 11.sp,
                                                 fontWeight = FontWeight.Bold,
@@ -423,8 +425,21 @@ fun CloudManagerDialog(
                         Button(
                             onClick = {
                                 if (confirmText.trim() == "delete") {
-                                    showWipeConfirm = false
-                                    onWipeAll()
+                                    val performWipe = {
+                                        showWipeConfirm = false
+                                        onWipeAll()
+                                    }
+                                    val activity = context as? androidx.fragment.app.FragmentActivity
+                                    if (isBiometricEnabled && activity != null) {
+                                        com.teleback.core.util.BiometricHelper.authenticate(
+                                            activity = activity,
+                                            title = "Confirm Cloud Vault Wipe",
+                                            subtitle = "Authenticate to permanently wipe cloud backup data",
+                                            onSuccess = performWipe
+                                        )
+                                    } else {
+                                        performWipe()
+                                    }
                                 }
                             },
                             enabled = confirmText.trim() == "delete",

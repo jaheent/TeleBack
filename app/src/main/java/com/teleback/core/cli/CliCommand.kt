@@ -56,29 +56,21 @@ enum class CliCommand(
         description = "Test bot & Telegram group link",
         usage = "6  or  test"
     ),
-    CUSTOM(
-        number = 7,
-        commandName = "custom",
-        aliases = listOf("theme", "themes", "icon", "icons", "style"),
-        shortLabel = "Themes & icons",
-        description = "Select themes and visual icons",
-        usage = "7  or  custom"
-    ),
-    KEYS(
-        number = 8,
-        commandName = "keys",
-        aliases = listOf("key", "crypto"),
-        shortLabel = "Export / import",
-        description = "View / export AES-256 master key",
-        usage = "8  or  keys"
-    ),
     CLEAR(
-        number = 9,
+        number = 7,
         commandName = "clear",
         aliases = listOf("cls", "c"),
         shortLabel = "Clear console",
         description = "Clear terminal console output",
-        usage = "9  or  clear"
+        usage = "7  or  clear"
+    ),
+    SETTINGS(
+        number = 8,
+        commandName = "settings",
+        aliases = listOf("set", "setting", "options", "prefs"),
+        shortLabel = "Settings menu",
+        description = "Themes, keys, scheduler & options",
+        usage = "8  or  settings"
     ),
     SETUP(
         number = 0,

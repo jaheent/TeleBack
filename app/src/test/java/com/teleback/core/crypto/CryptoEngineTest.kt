@@ -35,4 +35,18 @@ class CryptoEngineTest {
         // Should throw AEADBadTagException or IllegalArgumentException
         CryptoEngine.decryptBytes(encrypted, masterKey)
     }
+
+    @Test
+    fun testZeroizeByteArray() {
+        val bytes = byteArrayOf(1, 2, 3, 4, 5)
+        CryptoEngine.zeroize(bytes)
+        assertTrue(bytes.all { it == 0.toByte() })
+    }
+
+    @Test
+    fun testZeroizeCharArray() {
+        val chars = charArrayOf('a', 'b', 'c', 'd')
+        CryptoEngine.zeroize(chars)
+        assertTrue(chars.all { it == '\u0000' })
+    }
 }

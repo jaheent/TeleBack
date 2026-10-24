@@ -70,7 +70,7 @@ fun WelcomeDialog(
                         fontFamily = MonospaceFontFamily
                     )
                     Text(
-                        text = "v1.0",
+                        text = "v${com.teleback.BuildConfig.VERSION_NAME}",
                         color = TerminalTextMuted,
                         fontSize = 11.sp,
                         fontFamily = MonospaceFontFamily

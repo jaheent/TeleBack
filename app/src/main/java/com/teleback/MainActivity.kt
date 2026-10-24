@@ -5,7 +5,6 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
-import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
@@ -13,12 +12,13 @@ import androidx.activity.viewModels
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.documentfile.provider.DocumentFile
+import androidx.fragment.app.FragmentActivity
 import com.teleback.presentation.terminal.TerminalScreen
 import com.teleback.presentation.terminal.TerminalViewModel
 import com.teleback.presentation.theme.TeleBackTheme
 import com.teleback.presentation.theme.TeleBackThemeId
 
-class MainActivity : ComponentActivity() {
+class MainActivity : FragmentActivity() {
 
     private val viewModel: TerminalViewModel by viewModels()
 
@@ -35,17 +35,17 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private val notificationPermissionLauncher = registerForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { /* Permission result handled */ }
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             if (checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
-                notificationPermissionLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+                androidx.core.app.ActivityCompat.requestPermissions(
+                    this,
+                    arrayOf(android.Manifest.permission.POST_NOTIFICATIONS),
+                    101
+                )
             }
         }
 
@@ -59,6 +59,13 @@ class MainActivity : ComponentActivity() {
                     viewModel = viewModel
                 )
             }
+        }
+    }
+
+    override fun onStop() {
+        super.onStop()
+        if (viewModel.isBiometricEnabled.value) {
+            viewModel.lockApp()
         }
     }
 }

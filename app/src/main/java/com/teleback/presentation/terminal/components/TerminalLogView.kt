@@ -3,9 +3,11 @@ package com.teleback.presentation.terminal.components
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -20,9 +22,13 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.teleback.core.cli.LogLevel
@@ -36,9 +42,33 @@ fun TerminalLogView(
     val listState = rememberLazyListState()
     val colorScheme = MaterialTheme.colorScheme
 
+    val isNearBottom by remember {
+        derivedStateOf {
+            val lastVisible = listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
+            val total = listState.layoutInfo.totalItemsCount
+            total == 0 || lastVisible >= (total - 3).coerceAtLeast(0)
+        }
+    }
+
     LaunchedEffect(logs.size) {
-        if (logs.isNotEmpty()) {
-            listState.animateScrollToItem(logs.size - 1)
+        if (logs.isNotEmpty() && isNearBottom) {
+            listState.scrollToItem(logs.size - 1)
+        }
+    }
+
+    val scrollInfo by remember {
+        derivedStateOf {
+            val layoutInfo = listState.layoutInfo
+            val totalItems = layoutInfo.totalItemsCount
+            val visibleItems = layoutInfo.visibleItemsInfo.size
+            if (totalItems == 0 || visibleItems >= totalItems) {
+                null
+            } else {
+                val firstVisibleItem = layoutInfo.visibleItemsInfo.firstOrNull()?.index ?: 0
+                val thumbRatio = (visibleItems.toFloat() / totalItems.toFloat()).coerceIn(0.1f, 1f)
+                val scrollRatio = (firstVisibleItem.toFloat() / (totalItems - visibleItems).toFloat()).coerceIn(0f, 1f)
+                thumbRatio to scrollRatio
+            }
         }
     }
 
@@ -56,6 +86,34 @@ fun TerminalLogView(
         ) {
             items(logs, key = { it.id }) { log ->
                 LogItemRow(log = log)
+            }
+        }
+
+        // Compact Retro Scrollbar
+        scrollInfo?.let { (thumbRatio, scrollRatio) ->
+            Box(
+                modifier = Modifier
+                    .align(Alignment.CenterEnd)
+                    .fillMaxHeight()
+                    .width(3.dp)
+                    .background(colorScheme.outline.copy(alpha = 0.25f), RoundedCornerShape(1.5.dp))
+            ) {
+                BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+                    val totalHeight = maxHeight
+                    val thumbHeight = (totalHeight * thumbRatio).coerceAtLeast(16.dp)
+                    val availableOffset = totalHeight - thumbHeight
+                    val offsetY = availableOffset * scrollRatio
+
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(thumbHeight)
+                            .graphicsLayer {
+                                translationY = offsetY.toPx()
+                            }
+                            .background(colorScheme.primary.copy(alpha = 0.7f), RoundedCornerShape(1.5.dp))
+                    )
+                }
             }
         }
     }
