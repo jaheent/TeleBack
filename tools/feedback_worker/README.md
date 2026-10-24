@@ -10,7 +10,7 @@ Serverless Telegram Webhook handler running on Cloudflare Workers (100% free, 24
 [ Android App / User ]
          │
          ▼  (User sends diagnostic / feedback via Telegram)
-[@telebackfeedback_bot]
+[@telebackfblogs_bot]
          │
          ▼  (Telegram Webhook POST)
 [ Cloudflare Worker (worker.js) ]
@@ -34,7 +34,7 @@ Serverless Telegram Webhook handler running on Cloudflare Workers (100% free, 24
    - Go back to the Worker page -> **Settings** tab -> **Variables and Secrets**.
    - Under **Secrets**, click **Add**:
      - Variable name: `BOT_TOKEN`  
-       Value: `<Your @telebackfeedback_bot token from BotFather>`  
+       Value: `<Your @telebackfblogs_bot token from BotFather>`  
        Click **Encrypt**.
      - Variable name: `GROUP_ID`  
        Value: `<Your TeleBack Feedbacks Group ID, e.g. -100xxxxxxxxxx>`  
@@ -44,7 +44,7 @@ Serverless Telegram Webhook handler running on Cloudflare Workers (100% free, 24
        Click **Encrypt**.
    - Click **Save and deploy**.
 6. **Verify Group Connection**:
-   - Add `@telebackfeedback_bot` into your Telegram group.
+   - Add `@telebackfblogs_bot` into your Telegram group.
    - In that group, type `/id` or `/status`.
    - The bot will reply with the exact Group Chat ID (and Topic ID) to confirm connection!
 7. Copy your Worker URL:
@@ -78,41 +78,38 @@ Serverless Telegram Webhook handler running on Cloudflare Workers (100% free, 24
 
 ---
 
-## Step 2: Register the Webhook with Telegram
+## Step 2: 1-Click Webhook Registration & Live Diagnostics
 
-After deploying the worker, instruct Telegram to send updates to your Cloudflare Worker URL:
-
-Replace `<YOUR_BOT_TOKEN>` and `<YOUR_WORKER_URL>` in this URL and open it in your browser:
-
+### Option 1 (Easiest - 1 Click!):
+Open this link in your browser:
 ```text
-https://api.telegram.org/bot<YOUR_BOT_TOKEN>/setWebhook?url=<YOUR_WORKER_URL>
+https://teleback-feedback-bot.jaheen-built.workers.dev/set-webhook
 ```
+The Worker automatically registers itself with Telegram using your stored `BOT_TOKEN` and clears any old pending queues.
 
-#### Expected Telegram API Response:
-```json
-{
-  "ok": true,
-  "result": true,
-  "description": "Webhook was set"
-}
+### Option 2 (Manual):
+Replace `<YOUR_BOT_TOKEN>` with your token from `@BotFather` and open in your browser:
+```text
+https://api.telegram.org/bot<YOUR_BOT_TOKEN>/setWebhook?url=https://teleback-feedback-bot.jaheen-built.workers.dev/&drop_pending_updates=true
 ```
 
 ---
 
-## Step 3: End-to-End Verification
+## Step 3: End-to-End Live Verification
 
-1. **Test Webhook Status**:
-   - Open your Worker URL directly in your web browser: `https://teleback-feedback-bot.<subdomain>.workers.dev`
-   - You should see:
-     ```json
-     {
-       "status": "online",
-       "service": "TeleBack Feedback Webhook",
-       "target_group": "configured"
-     }
-     ```
-2. **Send a Test Feedback**:
-   - Open Telegram and message `@telebackfeedback_bot`: `Test diagnostic feedback report`.
+1. **Check Live Diagnostic Health**:
+   - Open your Worker URL directly in your browser:
+     `https://teleback-feedback-bot.jaheen-built.workers.dev/`
+   - It will run a real-time health check directly against Telegram's API (`getMe`, `getWebhookInfo`, and `getChat`) and tell you:
+     - Is your `BOT_TOKEN` valid and accepted by Telegram?
+     - Is the webhook connected to the worker?
+     - Can the bot access your feedback group (`GROUP_ID`)?
+     - The exact actionable fix if anything is misconfigured.
+
+2. **Verify in Telegram**:
+   - In DM with `@telebackfblogs_bot`: Send `/start` (Bot should reply immediately with the welcome prompt).
+   - In your Telegram feedback group: Add `@telebackfblogs_bot` as an Administrator, then send `/id` or `/id@telebackfblogs_bot` (Bot will reply with the chat ID).
+   - Send feedback from the Android app (`TeleBack_v2.6.apk`) and confirm ticket card appears in the feedback group with interactive review buttons.
    - The bot will immediately reply: `✅ Ticket received! The TeleBack developer team has been notified.`
 3. **Verify Interactive Buttons in Developer Group**:
    - Look inside your **TeleBack Feedbacks** private group.

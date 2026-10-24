@@ -2,11 +2,11 @@
  * TeleBack Feedback Bot Webhook - Cloudflare Worker
  * 
  * Serverless Telegram webhook router for receiving diagnostics & feedback
- * from @telebackfeedback_bot and posting interactive ticket cards
+ * from @telebackfblogs_bot and posting interactive ticket cards
  * with inline review actions to the developer group.
  * 
  * Required Secrets (Cloudflare Environment Variables):
- * - BOT_TOKEN: BotFather token for @telebackfeedback_bot
+ * - BOT_TOKEN: BotFather token for @telebackfblogs_bot
  * - GROUP_ID: Telegram Group ID (e.g. -100xxxxxxxxxx)
  * - TOPIC_ID / THREAD_ID (Optional): Forum Topic ID if group has Topics enabled
  * - SECRET_TOKEN (Optional): Telegram webhook secret token
@@ -14,19 +14,108 @@
 
 export default {
   async fetch(request, env, ctx) {
-    const targetGroupId = String(env.GROUP_ID || "").trim().replace(/^["']|["']$/g, '');
+    const url = new URL(request.url);
+    let targetGroupId = String(env.GROUP_ID || "").trim().replace(/^["']|["']$/g, '');
+    // Auto-correct: If user entered positive "100...", prepend "-" for Telegram Supergroups
+    if (/^100\d{8,}$/.test(targetGroupId)) {
+      targetGroupId = `-${targetGroupId}`;
+    }
     const topicId = (env.TOPIC_ID || env.THREAD_ID) ? String(env.TOPIC_ID || env.THREAD_ID).trim() : null;
 
-    // Health check endpoint for browser/GET requests
+    // 1-Click Automated Webhook Setup Endpoint: GET /set-webhook
+    if (request.method === "GET" && url.pathname === "/set-webhook") {
+      if (!env.BOT_TOKEN) {
+        return new Response(JSON.stringify({ error: "Missing BOT_TOKEN in Cloudflare environment secrets" }, null, 2), {
+          status: 400,
+          headers: { "Content-Type": "application/json" }
+        });
+      }
+      const webhookTarget = `${url.origin}/`;
+      let setWebhookApi = `https://api.telegram.org/bot${env.BOT_TOKEN}/setWebhook?url=${encodeURIComponent(webhookTarget)}&drop_pending_updates=true`;
+      if (env.SECRET_TOKEN) {
+        setWebhookApi += `&secret_token=${encodeURIComponent(env.SECRET_TOKEN)}`;
+      }
+
+      try {
+        const whRes = await fetch(setWebhookApi);
+        const whData = await whRes.json();
+        return new Response(JSON.stringify({
+          status: whData.ok ? "SUCCESS" : "FAILED",
+          message: whData.ok ? "Webhook successfully registered with Telegram!" : "Telegram rejected the webhook registration.",
+          worker_webhook_url: webhookTarget,
+          telegram_response: whData
+        }, null, 2), {
+          status: whData.ok ? 200 : 400,
+          headers: { "Content-Type": "application/json" }
+        });
+      } catch (e) {
+        return new Response(JSON.stringify({ error: e.message }, null, 2), {
+          status: 500,
+          headers: { "Content-Type": "application/json" }
+        });
+      }
+    }
+
+    // Health check & Live Telegram Diagnostic endpoint for browser/GET requests
     if (request.method !== "POST") {
+      let botInfo = null;
+      let webhookInfo = null;
+      let groupInfo = null;
+
+      if (env.BOT_TOKEN) {
+        try {
+          const res = await fetch(`https://api.telegram.org/bot${env.BOT_TOKEN}/getMe`);
+          botInfo = await res.json();
+        } catch (e) {
+          botInfo = { ok: false, error: e.message };
+        }
+
+        try {
+          const res = await fetch(`https://api.telegram.org/bot${env.BOT_TOKEN}/getWebhookInfo`);
+          webhookInfo = await res.json();
+        } catch (e) {
+          webhookInfo = { ok: false, error: e.message };
+        }
+
+        if (targetGroupId) {
+          try {
+            const res = await fetch(`https://api.telegram.org/bot${env.BOT_TOKEN}/getChat?chat_id=${encodeURIComponent(targetGroupId)}`);
+            groupInfo = await res.json();
+          } catch (e) {
+            groupInfo = { ok: false, error: e.message };
+          }
+        }
+      }
+
+      const isBotValid = botInfo?.ok === true;
+      const isWebhookActive = webhookInfo?.ok === true && webhookInfo.result.url === `${url.origin}/`;
+      const isGroupReachable = groupInfo?.ok === true;
+
       return new Response(
         JSON.stringify({
           status: "online",
           service: "TeleBack Feedback Webhook",
-          bot_token: env.BOT_TOKEN ? "configured" : "MISSING",
-          group_id: targetGroupId ? `configured (${targetGroupId})` : "MISSING",
-          topic_id: topicId ? `configured (${topicId})` : "none",
-          timestamp: new Date().toISOString()
+          bot_token_secret: env.BOT_TOKEN ? "present" : "MISSING",
+          bot_identity: isBotValid ? `@${botInfo.result.username} (ID: ${botInfo.result.id})` : "INVALID_TOKEN_OR_UNAUTHORIZED",
+          group_id_secret: targetGroupId ? targetGroupId : "MISSING",
+          topic_id_secret: topicId ? topicId : "none",
+          live_diagnostics: {
+            telegram_get_me: botInfo,
+            telegram_webhook_info: webhookInfo,
+            group_access: groupInfo
+          },
+          health_summary: {
+            bot_token_healthy: isBotValid,
+            webhook_registered_to_worker: isWebhookActive,
+            group_accessible: isGroupReachable
+          },
+          action_required: !isBotValid
+            ? "CRITICAL: The BOT_TOKEN configured in Cloudflare Secrets is rejected by Telegram. Please copy the exact token from @BotFather for @telebackfblogs_bot and update BOT_TOKEN in Cloudflare Settings -> Variables and Secrets."
+            : (!isWebhookActive
+              ? `ACTION NEEDED: Webhook is NOT connected to this worker. Click or open ${url.origin}/set-webhook to connect Telegram to this worker in 1-click!`
+              : (!isGroupReachable
+                ? `ACTION NEEDED: Bot cannot post to group ${targetGroupId}. Make sure @${botInfo.result.username} is added to the group as an Administrator.`
+                : "ALL SYSTEMS GO: Bot token, webhook routing, and group connectivity are 100% verified!"))
         }, null, 2),
         {
           status: 200,
@@ -45,7 +134,6 @@ export default {
 
     if (!env.BOT_TOKEN || !targetGroupId) {
       console.error("CRITICAL: Missing BOT_TOKEN or GROUP_ID in Worker environment secrets.");
-      // Return 200 to acknowledge webhook so Telegram does not loop retries, but log clearly
       return new Response("Misconfigured: Missing BOT_TOKEN or GROUP_ID", { status: 200 });
     }
 
@@ -66,14 +154,13 @@ export default {
       return new Response("OK", { status: 200 });
     } catch (err) {
       console.error("Webhook processing error:", err);
-      // Return 200 to Telegram to prevent retry storms; errors are captured in Cloudflare logs
       return new Response("OK", { status: 200 });
     }
   }
 };
 
 /**
- * Handle messages sent to @telebackfeedback_bot
+ * Handle messages sent to @telebackfblogs_bot
  */
 async function handleIncomingMessage(message, env, targetGroupId, topicId) {
   const text = message.text || "";
@@ -81,7 +168,7 @@ async function handleIncomingMessage(message, env, targetGroupId, topicId) {
   // 1. Group / Supergroup diagnostic handler:
   // If the bot is added to a group, typing /id or /status immediately replies with the chat ID
   if (message.chat?.type === "group" || message.chat?.type === "supergroup") {
-    if (text.startsWith("/id") || text.startsWith("/chatid") || text.startsWith("/status") || text.startsWith("/help")) {
+    if (text.startsWith("/id") || text.startsWith("/chatid") || text.startsWith("/status") || text.startsWith("/start")) {
       const topicStr = message.message_thread_id ? `\n🧵 *Topic/Thread ID:* \`${message.message_thread_id}\`` : "";
       await safeSendMessage(env.BOT_TOKEN, {
         chat_id: message.chat.id,
@@ -109,9 +196,8 @@ async function handleIncomingMessage(message, env, targetGroupId, topicId) {
   if (text.startsWith("/start") || text.startsWith("/help") || text.startsWith("/status")) {
     const welcomeText = 
       "👋 *Welcome to TeleBack Feedback & Diagnostics Bot!*\n\n" +
-      "To submit a report, simply paste your copied crash dump or type your feedback below.\n" +
-      "It will be forwarded directly to the developer team with zero-knowledge privacy.\n\n" +
-      "⚙️ *Group Config Check:* Target Group ID is configured.";
+      "To submit a report, paste your feedback or diagnostic note below.\n" +
+      "It will be forwarded directly to the developer group with full privacy.";
 
     await safeSendMessage(env.BOT_TOKEN, {
       chat_id: message.chat.id,
@@ -127,11 +213,11 @@ async function handleIncomingMessage(message, env, targetGroupId, topicId) {
     : `User ${message.from?.id || "Unknown"}`;
 
   const header = 
-    `📩 *NEW TICKET* from ${userInfo}\n` +
+    `📩 *USER FEEDBACK TICKET* (${userInfo})\n` +
     `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
     `Status: 🔴 *UNREVIEWED*\n\n`;
 
-  const reportContent = message.text || message.caption || (message.document ? "[Document attached]" : "[Empty report]");
+  const reportContent = message.text || message.caption || (message.document ? "[Document attached]" : "[Empty note]");
   const fullCard = header + reportContent;
 
   const parsedThreadId = topicId ? parseInt(topicId, 10) : undefined;
@@ -168,7 +254,7 @@ async function handleIncomingMessage(message, env, targetGroupId, topicId) {
             `The bot could not forward your report to the designated group (\`${targetGroupId}\`).\n\n` +
             `*Telegram Error:* \`${sendResult.description || "Unknown error"}\`\n\n` +
             `🔧 *How to fix:*\n` +
-            `1. Make sure @telebackfeedback_bot is added as a member (or Administrator) to your group.\n` +
+            `1. Make sure @telebackfblogs_bot is added as an Administrator to your group.\n` +
             `2. If your group is a Supergroup, verify the Group ID starts with \`-100\`.\n` +
             `3. If Topics/Forums are enabled in your group, configure the \`TOPIC_ID\` secret.\n` +
             `4. You can type \`/id\` inside the group to verify its exact Chat ID!`,
@@ -229,7 +315,6 @@ async function handleCallbackQuery(call, env) {
       .replace(/🟢 \*REVIEWED\* \(by .*?\)/, `📦 *ARCHIVED* (by ${adminName})`)
       .replace(/🟢 REVIEWED \(by .*?\)/, `📦 ARCHIVED (by ${adminName})`);
 
-    // Archived: remove inline buttons
     await editMessage(env.BOT_TOKEN, call.message, archivedText, null);
     await telegramApi(env.BOT_TOKEN, "answerCallbackQuery", {
       callback_query_id: call.id,

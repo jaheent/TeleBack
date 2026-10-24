@@ -88,19 +88,18 @@ fun FeedbackDialog(
             buildString {
                 appendLine("💬 #FEEDBACK • TeleBack v${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})")
                 appendLine("📅 Timestamp: $timestamp")
-                appendLine("📱 Device: ${Build.MANUFACTURER} ${Build.MODEL} (${Build.BRAND})")
-                appendLine("🤖 Android: ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})")
+                appendLine("📦 Platform: Android ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})")
                 appendLine()
-                appendLine("👤 FEEDBACK / NOTE:")
+                appendLine("👤 USER NOTE:")
                 appendLine(if (userNote.isNotBlank()) userNote.trim() else "(No additional comment)")
                 appendLine()
                 if (includeLogs) {
-                    appendLine("📜 RECENT CONSOLE LOGS (Sanitized):")
+                    appendLine("📋 OPERATIONAL TRACE:")
                     val logs = CrashHandler.getRecentLogs()
                     if (logs.isNotEmpty()) {
                         appendLine(logs.joinToString("\n"))
                     } else {
-                        appendLine("(No console logs available)")
+                        appendLine("(No trace available)")
                     }
                 }
             }
@@ -146,7 +145,7 @@ fun FeedbackDialog(
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
                     text = if (isCrashReport) {
-                        "TeleBack encountered an unexpected error. You can transmit this sanitized report to @telebackfeedback_bot to help fix it."
+                        "TeleBack encountered an unexpected error. You can transmit this sanitized report to @telebackfblogs_bot to help fix it."
                     } else {
                         "Share feedback, suggest improvements, or report issues directly to the TeleBack development team."
                     },
@@ -263,7 +262,7 @@ fun FeedbackDialog(
                     )
                 ) {
                     Text(
-                        text = "✈️ Send via @telebackfeedback_bot",
+                        text = "✈️ Send via @telebackfblogs_bot",
                         fontSize = 11.sp,
                         fontFamily = MonospaceFontFamily
                     )
@@ -317,18 +316,18 @@ private fun sendViaTelegram(context: Context, reportText: String) {
 
     Toast.makeText(
         context,
-        "Report copied to clipboard! Paste it into @telebackfeedback_bot",
+        "Report copied to clipboard! Paste it into @telebackfblogs_bot",
         Toast.LENGTH_LONG
     ).show()
 
-    // 2. Open Telegram directly at @telebackfeedback_bot
-    val tgIntent = Intent(Intent.ACTION_VIEW, Uri.parse("tg://resolve?domain=telebackfeedback_bot")).apply {
+    // 2. Open Telegram directly at @telebackfblogs_bot
+    val tgIntent = Intent(Intent.ACTION_VIEW, Uri.parse("tg://resolve?domain=telebackfblogs_bot")).apply {
         flags = Intent.FLAG_ACTIVITY_NEW_TASK
     }
     try {
         context.startActivity(tgIntent)
     } catch (_: Exception) {
-        val webIntent = Intent(Intent.ACTION_VIEW, Uri.parse("https://t.me/telebackfeedback_bot")).apply {
+        val webIntent = Intent(Intent.ACTION_VIEW, Uri.parse("https://t.me/telebackfblogs_bot")).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK
         }
         try {

@@ -11,6 +11,9 @@ if not BOT_TOKEN:
 GROUP_ID_STR = os.getenv("GROUP_ID", "").strip().strip("\"'")
 if not GROUP_ID_STR:
     raise ValueError("Missing environment variable: GROUP_ID must be set.")
+# Auto-correct if positive 100... supergroup format
+if GROUP_ID_STR.startswith("100") and len(GROUP_ID_STR) >= 11:
+    GROUP_ID_STR = f"-{GROUP_ID_STR}"
 GROUP_ID = int(GROUP_ID_STR)
 
 TOPIC_ID_STR = os.getenv("TOPIC_ID") or os.getenv("THREAD_ID")
@@ -52,8 +55,8 @@ def handle_group_diagnostics(message):
 def send_welcome(message):
     welcome_text = (
         "👋 *Welcome to TeleBack Feedback & Diagnostics Bot!*\n\n"
-        "To submit a report, simply paste your copied crash dump or type your feedback below.\n"
-        "It will be forwarded directly to the developer team with zero-knowledge privacy."
+        "To submit a report, paste your feedback or diagnostic note below.\n"
+        "It will be forwarded directly to the developer group with full privacy."
     )
     bot.reply_to(message, welcome_text, parse_mode="Markdown")
 
@@ -65,7 +68,7 @@ def handle_user_submission(message):
 
     user_info = f"@{message.from_user.username}" if message.from_user.username else f"User {message.from_user.id}"
     header = (
-        f"📩 *NEW TICKET* from {user_info}\n"
+        f"📩 *USER FEEDBACK TICKET* ({user_info})\n"
         f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
         f"Status: 🔴 *UNREVIEWED*\n\n"
     )
@@ -103,7 +106,7 @@ def handle_user_submission(message):
             f"The bot could not forward your report to the designated group (`{GROUP_ID}`).\n\n"
             f"*Telegram Error:* `{err_msg}`\n\n"
             f"🔧 *How to fix:*\n"
-            f"1. Make sure @telebackfeedback_bot is added as a member/admin in your group.\n"
+            f"1. Make sure @telebackfblogs_bot is added as an Administrator to your group.\n"
             f"2. Ensure the Group ID starts with `-100`.\n"
             f"3. Type `/id` inside the group to verify its exact Chat ID."
         )

@@ -52,7 +52,7 @@ Most cloud storage services require account signups, recurring monthly subscript
 - 🔒 **Biometric Sentinel**:
   - Android `BiometricPrompt` guarding app launch, key export, and vault wipes.
 - 🐛 **Privacy-First Diagnostics**:
-  - Serverless feedback pipeline via Cloudflare Workers and `@telebackfeedback_bot`.
+  - Serverless feedback pipeline via Cloudflare Workers and `@telebackfblogs_bot`.
   - Zero-knowledge sanitization scrubbing bot tokens, chat IDs, master keys, and file paths before transmission.
 
 ---

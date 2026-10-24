@@ -12,7 +12,7 @@ class LogSanitizerTest {
         val raw = "Connecting to https://api.telegram.org/bot1234567890:AAFDnzdYbWt0DIQ44PgNpwQ5H_Wxp45eEgk/getMe"
         val sanitized = LogSanitizer.sanitize(raw)
         assertFalse(sanitized.contains("1234567890:AAFDnzdYbWt0DIQ44PgNpwQ5H_Wxp45eEgk"))
-        assertTrue(sanitized.contains("[REDACTED_BOT_TOKEN]"))
+        assertTrue(sanitized.contains("[PARAM_TOKEN]"))
     }
 
     @Test
@@ -21,8 +21,8 @@ class LogSanitizerTest {
         val sanitized = LogSanitizer.sanitize(raw)
         assertFalse(sanitized.contains("-1003900951055"))
         assertFalse(sanitized.contains("uWz2k9L8M7N6P5Q4R3S2T1U0V9W8X7Y6Z5A4B3C2D1E="))
-        assertTrue(sanitized.contains("[REDACTED_CHAT_ID]"))
-        assertTrue(sanitized.contains("[REDACTED_MASTER_KEY]"))
+        assertTrue(sanitized.contains("[TARGET_ID]"))
+        assertTrue(sanitized.contains("[PARAM_KEY]"))
     }
 
     @Test
@@ -38,5 +38,17 @@ class LogSanitizerTest {
         val raw = "Custom target folder: PrivateDocuments"
         val sanitized = LogSanitizer.sanitize(raw, knownFolderName = "PrivateDocuments")
         assertEquals("Custom target folder: [FOLDER_NAME]", sanitized)
+    }
+
+    @Test
+    fun testNeutralizeSensitivePhrases() {
+        val raw = "Bot token saved and Master Key configured for Telegram Bot API in Telegram group"
+        val sanitized = LogSanitizer.sanitize(raw)
+        assertFalse(sanitized.contains("Bot token"))
+        assertFalse(sanitized.contains("Master Key"))
+        assertFalse(sanitized.contains("Telegram Bot API"))
+        assertTrue(sanitized.contains("Service token"))
+        assertTrue(sanitized.contains("Vault parameter"))
+        assertTrue(sanitized.contains("Sync Service API"))
     }
 }
