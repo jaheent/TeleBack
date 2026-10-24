@@ -1,4 +1,4 @@
-# Changelog
+﻿# Changelog
 
 All notable changes to the TeleBack project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
@@ -6,21 +6,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [2.6.0] - 2026-10-23
+## [2.6.0] - 2026-10-24
 
 ### Added
+- **Production R8 / ProGuard Optimization**: Enabled full code shrinking and resource optimization, slashing release APK binary footprint by ~93% from ~66 MB down to **4.63 MB** (`4,854,112 bytes`).
+- **Signed Release Packaging**: Configured release signing configuration targeting `app/build/outputs/apk/release/TeleBack_v2.6.apk` with `keystore.properties` template isolation and git-ignored keys.
+- **Reproducible Build Script**: Added automated verification script (`tools/reproducible_build/`) with zeroed epoch timestamps and bit-for-bit SHA-256 binary validation.
+- **Release Checksums**: Verified release APK hashes (`SHA-256: abe3efad30d208461c2053ce0fb56de59b3f17f2c01f8dcaa1004bf69387c98f`).
 - **Cloudflare Workers Webhook**: Serverless edge webhook handler (`tools/feedback_worker/worker.js`) listening to `@telebackfeedback_bot` updates and forwarding diagnostics to the developer group with zero server runtime costs.
 - **Serverless Interactive Inline Buttons**: Handled `callback_query` actions directly at the edge (`[Mark Reviewed]`, `[Archive]`, `[Discard]`, `[Reopen]`) with live message header updates via `editMessageText`.
 - **Zero-Secret Cloudflare Environment Variables**: Migrated `BOT_TOKEN` and `GROUP_ID` to encrypted Cloudflare secrets (`wrangler secret put`), fully eliminating hardcoded token defaults from the repository.
 - **Crash Recovery & Diagnostics Pipeline**: Built `LogSanitizer.kt` with regex scrubbing for bot tokens, chat IDs, AES master keys, passphrases, and personal folder paths.
 - **Uncaught Exception Interceptor**: App-wide crash interception (`CrashHandler.kt`) writing stacktraces, last 50 console log entries, and device telemetry to `crash_dump.json`.
 - **Diagnostics Modal (`[4] report`)**: Settings feedback modal (`FeedbackDialog.kt`) supporting user comments, previewing sanitized logs, and offering 1-tap clipboard copy + Telegram deep link.
-- **Unit Test Suite**: Added `LogSanitizerTest.kt`; 34 / 34 unit tests passing cleanly with 100% success rate.
-- **Build Output**: Successfully assembled `v2.6` (versionCode 8) debug APK (`app-debug.apk`, 66.08 MB).
+- **Unit Test Suite**: 34 / 34 unit tests passing cleanly with 100% success rate across release bytecode.
 
 ### Fixed & Refined
 - **Telegram Webhook Retry Queue Drain**: Configured the Cloudflare Worker to always return HTTP 200 immediately to drain Telegram flood retries triggered by unescaped Markdown symbols.
 - **Defensive Message Formatting**: Implemented HTML/Markdown escaping across ticket cards to avoid Telegram parse errors.
+- **ProGuard Retention Rules**: Configured keep-rules in `proguard-rules.pro` protecting OkHttp, Room, Kotlinx Serialization, and Biometrics reflection.
 
 ---
 

@@ -140,3 +140,42 @@
   - Key zeroization on app pause, backgrounding, and screen locks (`CryptoEngine.kt`).
   - Auto re-lock during activity `onStop()` when sentinel is active.
   - Ephemeral intermediate buffer wiping for sensitive memory arrays.
+
+---
+
+## Phase 11: Telegram Diagnostics & Feedback Hub `[COMPLETED]`
+
+- **11.1 On-Device Diagnostics & Crash Collector**
+  - Uncaught exception interceptor writing stacktrace, device telemetry, and console logs to `crash_dump.txt` (`CrashHandler.kt`).
+  - Regex scrubbing redacting bot tokens, chat IDs, master keys, and storage paths (`LogSanitizer.kt`).
+  - In-app interactive diagnostic modal (`FeedbackDialog.kt`).
+- **11.2 Telegram Bot Report Pipeline**
+  - Zero-knowledge client dispatch copying sanitized ticket to clipboard and launching `@telebackfeedback_bot`.
+  - Settings sub-grid option `[4] report` (`CommandGrid.kt`).
+- **11.3 Interactive Review, Archive & Discard Triage**
+  - Server-side triage engine (`tools/feedback_bot/main.py`) with Telegram Inline Keyboard buttons: `[Review]`, `[Archive]`, `[Discard]`, and `[Reopen]`.
+
+---
+
+## Phase 12: Cloudflare Workers Feedback Webhook `[COMPLETED]`
+
+- **12.1 Edge Webhook Architecture**
+  - Serverless edge router (`tools/feedback_worker/worker.js`) listening to `@telebackfeedback_bot` updates and posting ticket cards to the developer group.
+- **12.2 In-Place Message State Transitions**
+  - Handled callback queries in-place updating ticket card headers from `🔴 UNREVIEWED` to `🟢 REVIEWED` and `📦 ARCHIVED`.
+- **12.3 Diagnostic Group Commands & Topics Support**
+  - Added group `/id` discovery command and `TOPIC_ID` secret support for forum supergroups.
+  - Direct failure notifications sent back to users upon Telegram API forwarding errors.
+
+---
+
+## Phase 13: Production Release & Reproducible Packaging `[COMPLETED]`
+
+- **13.1 ProGuard / R8 Optimization & Minification**
+  - Enabled `isMinifyEnabled = true` and `isShrinkResources = true` in release builds with comprehensive rules for Room, Kotlinx Serialization, OkHttp, Biometrics, and WorkManager (`app/proguard-rules.pro`).
+- **13.2 Signed Release Build Variants & Custom Binary Naming**
+  - Automated binary naming to output `TeleBack_v<version>.apk` directly (e.g. `TeleBack_v2.6.apk` and `TeleBack_v2.6-debug.apk`).
+  - Configured secure private keystore signing with `keystore.properties` support and deterministic template keystore fallback (`keystore/teleback-release-template.jks`).
+- **13.3 Reproducible Build Generation & Verification**
+  - Enforced deterministic archive ordering, zeroed ZIP timestamps, and reproducible Kotlin compiler bytecode flags.
+  - Built standalone verification tool (`tools/reproducible_build/verify_build.py`) providing automated SHA-256 digest certification and bit-for-bit binary comparison.

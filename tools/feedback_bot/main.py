@@ -4,15 +4,17 @@ from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
 from datetime import datetime
 
 # Environment variables for zero-secret deployment
-# NEVER hardcode tokens here. Set BOT_TOKEN and GROUP_ID in your hosting dashboard or .env file.
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 if not BOT_TOKEN:
     raise ValueError("Missing environment variable: BOT_TOKEN must be set.")
 
-GROUP_ID_STR = os.getenv("GROUP_ID")
+GROUP_ID_STR = os.getenv("GROUP_ID", "").strip().strip("\"'")
 if not GROUP_ID_STR:
     raise ValueError("Missing environment variable: GROUP_ID must be set.")
 GROUP_ID = int(GROUP_ID_STR)
+
+TOPIC_ID_STR = os.getenv("TOPIC_ID") or os.getenv("THREAD_ID")
+TOPIC_ID = int(TOPIC_ID_STR.strip().strip("\"'")) if TOPIC_ID_STR else None
 
 bot = telebot.TeleBot(BOT_TOKEN)
 
@@ -31,6 +33,20 @@ def build_ticket_markup(status="unreviewed"):
             InlineKeyboardButton("🗑 Discard", callback_data="discard")
         )
     return markup
+
+@bot.message_handler(func=lambda msg: msg.chat.type in ["group", "supergroup"], commands=['id', 'chatid', 'status', 'help'])
+def handle_group_diagnostics(message):
+    topic_info = f"\n🧵 *Topic/Thread ID:* `{message.message_thread_id}`" if getattr(message, 'message_thread_id', None) else ""
+    text = (
+        f"🤖 *TeleBack Feedback Bot Active*\n\n"
+        f"📍 *This Group Chat ID:* `{message.chat.id}`\n"
+        f"🏷️ *Group Title:* {message.chat.title or 'Group'}"
+        f"{topic_info}\n\n"
+        f"✅ Bot is connected to this chat.\n"
+        f"To route reports here, set `GROUP_ID={message.chat.id}`"
+        + (f" and `TOPIC_ID={message.message_thread_id}`" if getattr(message, 'message_thread_id', None) else "")
+    )
+    bot.reply_to(message, text, parse_mode="Markdown")
 
 @bot.message_handler(commands=['start', 'help'])
 def send_welcome(message):
@@ -58,23 +74,43 @@ def handle_user_submission(message):
     full_card = header + report_content
 
     # If document attached, forward document; otherwise send formatted markdown message
-    if message.document:
-        bot.send_document(
-            chat_id=GROUP_ID,
-            document=message.document.file_id,
-            caption=full_card[:1024],
-            reply_markup=build_ticket_markup("unreviewed"),
-            parse_mode="Markdown"
+    try:
+        if message.document:
+            bot.send_document(
+                chat_id=GROUP_ID,
+                document=message.document.file_id,
+                caption=full_card[:1024],
+                reply_markup=build_ticket_markup("unreviewed"),
+                message_thread_id=TOPIC_ID,
+                parse_mode="Markdown"
+            )
+        else:
+            bot.send_message(
+                chat_id=GROUP_ID,
+                text=full_card[:4096],
+                reply_markup=build_ticket_markup("unreviewed"),
+                message_thread_id=TOPIC_ID,
+                parse_mode="Markdown"
+            )
+        
+        bot.reply_to(message, "✅ *Ticket received!* The TeleBack developer team has been notified.", parse_mode="Markdown")
+    except Exception as e:
+        err_msg = str(e)
+        print(f"Error forwarding report to developer group ({GROUP_ID}): {err_msg}")
+        # Send actionable failure message back to user
+        failure_text = (
+            f"⚠️ *Delivery Failure to Group*\n\n"
+            f"The bot could not forward your report to the designated group (`{GROUP_ID}`).\n\n"
+            f"*Telegram Error:* `{err_msg}`\n\n"
+            f"🔧 *How to fix:*\n"
+            f"1. Make sure @telebackfeedback_bot is added as a member/admin in your group.\n"
+            f"2. Ensure the Group ID starts with `-100`.\n"
+            f"3. Type `/id` inside the group to verify its exact Chat ID."
         )
-    else:
-        bot.send_message(
-            chat_id=GROUP_ID,
-            text=full_card[:4096],
-            reply_markup=build_ticket_markup("unreviewed"),
-            parse_mode="Markdown"
-        )
-
-    bot.reply_to(message, "✅ *Ticket received!* The TeleBack developer team has been notified.", parse_mode="Markdown")
+        try:
+            bot.reply_to(message, failure_text, parse_mode="Markdown")
+        except Exception:
+            bot.reply_to(message, failure_text)
 
 @bot.callback_query_handler(func=lambda call: True)
 def handle_ticket_actions(call):
@@ -130,18 +166,17 @@ def handle_ticket_actions(call):
         bot.answer_callback_query(call.id, "Ticket Reopened 🔴")
 
     elif call.data == "archive":
-        archived_text = current_text
-        archived_text = archived_text.replace("🔴 *UNREVIEWED*", f"📦 *ARCHIVED* (by {admin_name})")
+        archived_text = current_text.replace("🔴 *UNREVIEWED*", f"📦 *ARCHIVED* (by {admin_name})")
         archived_text = archived_text.replace("🔴 UNREVIEWED", f"📦 ARCHIVED (by {admin_name})")
-        archived_text = archived_text.replace("🟢 *REVIEWED*", f"📦 *ARCHIVED* (by {admin_name})")
-        archived_text = archived_text.replace("🟢 REVIEWED", f"📦 ARCHIVED (by {admin_name})")
+        archived_text = archived_text.replace(f"🟢 *REVIEWED*", f"📦 *ARCHIVED* (by {admin_name})")
+        archived_text = archived_text.replace(f"🟢 REVIEWED", f"📦 ARCHIVED (by {admin_name})")
 
         if call.message.text:
             bot.edit_message_text(
                 chat_id=call.message.chat.id,
                 message_id=call.message.message_id,
                 text=archived_text,
-                reply_markup=None,  # Finalized state: remove buttons
+                reply_markup=None,
                 parse_mode="Markdown"
             )
         else:
@@ -159,5 +194,5 @@ def handle_ticket_actions(call):
         bot.answer_callback_query(call.id, "Ticket Discarded 🗑")
 
 if __name__ == "__main__":
-    print("TeleBack Feedback Bot is listening...")
+    print(f"🚀 TeleBack Feedback Bot polling active for group: {GROUP_ID} (Topic: {TOPIC_ID})...")
     bot.infinity_polling()

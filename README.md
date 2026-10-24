@@ -1,14 +1,20 @@
-# TeleBack ⚡
+<div align="center">
 
-> **Decentralized personal backup, restore, and sync engine for Android 15+ powered by private Telegram groups with authenticated on-device AES-256-GCM encryption.**
+  <img width="180" alt="Teleback App Icon" src="https://github.com/user-attachments/assets/8fcf493b-8f16-48cd-9377-a28ca010de8c" />
 
-[![Android](https://img.shields.io/badge/Platform-Android%2015%2B%20(API%2035)-3DDC84?logo=android&logoColor=white)](https://developer.android.com/about/versions/15)
-[![Kotlin](https://img.shields.io/badge/Language-Kotlin%202.0-7F52FF?logo=kotlin&logoColor=white)](https://kotlinlang.org/)
-[![Compose](https://img.shields.io/badge/UI-Jetpack%20Compose-4285F4?logo=jetpackcompose&logoColor=white)](https://developer.android.com/jetpack/compose)
-[![Encryption](https://img.shields.io/badge/Security-AES--256--GCM-critical)](https://en.wikipedia.org/wiki/Galois/Counter_Mode)
-[![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+  <h1>TeleBack</h1>
 
----
+  <p><strong>Decentralized personal backup, restore, and sync engine for Android 15+ powered by private Telegram groups with authenticated on-device AES-256-GCM encryption.</strong></p>
+
+  <p>
+    <a href="https://developer.android.com/about/versions/15"><img src="https://img.shields.io/badge/Platform-Android%2015%2B%20(API%2035)-3DDC84?logo=android&logoColor=white" alt="Android" /></a>
+    <a href="https://kotlinlang.org/"><img src="https://img.shields.io/badge/Language-Kotlin%202.0-7F52FF?logo=kotlin&logoColor=white" alt="Kotlin" /></a>
+    <a href="https://developer.android.com/jetpack/compose"><img src="https://img.shields.io/badge/UI-Jetpack%20Compose-4285F4?logo=jetpackcompose&logoColor=white" alt="Compose" /></a>
+    <a href="https://en.wikipedia.org/wiki/Galois/Counter_Mode"><img src="https://img.shields.io/badge/Security-AES--256--GCM-critical" alt="Encryption" /></a>
+    <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License" /></a>
+  </p>
+
+</div>
 
 ## 💡 What is TeleBack?
 
@@ -105,24 +111,6 @@ cd TeleBack
 ```
 The compiled APK will be located at:
 `app/build/outputs/apk/debug/app-debug.apk`
-
----
-
-## 🗺️ Roadmap Status
-
-- [x] **Phase 1**: Core Engine, Storage & Telegram Ingestion
-- [x] **Phase 2**: CLI Terminal Interface & Interaction
-- [x] **Phase 3**: Large File Streaming & Network Resilience
-- [x] **Phase 4**: Onboarding, Setup Wizard & Visual Walkthrough
-- [x] **Phase 5**: Storage Intelligence & Snapshot Retention
-- [x] **Phase 6**: Visual & Theme Overhaul (Finalized Adaptive Launcher Icon)
-- [x] **Phase 7**: Cloud Snapshot Manager
-- [x] **Phase 8**: Passphrase-First Recovery & Task Alerts
-- [x] **Phase 9**: Automated Background Sync & Scheduling
-- [x] **Phase 10**: Biometric Vault Security & In-Memory Protection
-- [x] **Phase 11**: Telegram Diagnostics & Feedback Hub
-- [x] **Phase 12**: Cloudflare Workers Feedback Webhook
-- [ ] **Phase 13**: Production Release & Reproducible Packaging
 
 ---
 

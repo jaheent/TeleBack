@@ -12,4 +12,10 @@ app/build/
 *.hprof
 # Local AI & tool caches
 graft/.cache/
-.claude/*.local.json
+.claude
+
+# Release signing secrets
+keystore.properties
+keystore/*.jks
+!keystore/teleback-release-template.jks
+*.keystore

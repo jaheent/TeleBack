@@ -39,8 +39,15 @@ Serverless Telegram Webhook handler running on Cloudflare Workers (100% free, 24
      - Variable name: `GROUP_ID`  
        Value: `<Your TeleBack Feedbacks Group ID, e.g. -100xxxxxxxxxx>`  
        Click **Encrypt**.
+     - *(Optional)* Variable name: `TOPIC_ID`  
+       Value: `<Topic ID if forum supergroup has Topics enabled>`  
+       Click **Encrypt**.
    - Click **Save and deploy**.
-6. Copy your Worker URL:
+6. **Verify Group Connection**:
+   - Add `@telebackfeedback_bot` into your Telegram group.
+   - In that group, type `/id` or `/status`.
+   - The bot will reply with the exact Group Chat ID (and Topic ID) to confirm connection!
+7. Copy your Worker URL:
    - It will look like: `https://teleback-feedback-bot.<your-subdomain>.workers.dev`
 
 ---

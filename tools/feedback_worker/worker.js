@@ -8,11 +8,15 @@
  * Required Secrets (Cloudflare Environment Variables):
  * - BOT_TOKEN: BotFather token for @telebackfeedback_bot
  * - GROUP_ID: Telegram Group ID (e.g. -100xxxxxxxxxx)
+ * - TOPIC_ID / THREAD_ID (Optional): Forum Topic ID if group has Topics enabled
  * - SECRET_TOKEN (Optional): Telegram webhook secret token
  */
 
 export default {
   async fetch(request, env, ctx) {
+    const targetGroupId = String(env.GROUP_ID || "").trim().replace(/^["']|["']$/g, '');
+    const topicId = (env.TOPIC_ID || env.THREAD_ID) ? String(env.TOPIC_ID || env.THREAD_ID).trim() : null;
+
     // Health check endpoint for browser/GET requests
     if (request.method !== "POST") {
       return new Response(
@@ -20,7 +24,8 @@ export default {
           status: "online",
           service: "TeleBack Feedback Webhook",
           bot_token: env.BOT_TOKEN ? "configured" : "MISSING",
-          group_id: env.GROUP_ID ? `configured (${env.GROUP_ID})` : "MISSING",
+          group_id: targetGroupId ? `configured (${targetGroupId})` : "MISSING",
+          topic_id: topicId ? `configured (${topicId})` : "none",
           timestamp: new Date().toISOString()
         }, null, 2),
         {
@@ -38,7 +43,7 @@ export default {
       }
     }
 
-    if (!env.BOT_TOKEN || !env.GROUP_ID) {
+    if (!env.BOT_TOKEN || !targetGroupId) {
       console.error("CRITICAL: Missing BOT_TOKEN or GROUP_ID in Worker environment secrets.");
       // Return 200 to acknowledge webhook so Telegram does not loop retries, but log clearly
       return new Response("Misconfigured: Missing BOT_TOKEN or GROUP_ID", { status: 200 });
@@ -47,9 +52,9 @@ export default {
     try {
       const update = await request.json();
 
-      // 1. Handle incoming user messages (private chat only)
+      // 1. Handle incoming user messages
       if (update.message) {
-        await handleIncomingMessage(update.message, env);
+        await handleIncomingMessage(update.message, env, targetGroupId, topicId);
       }
 
       // 2. Handle interactive inline button clicks (callbacks)
@@ -68,22 +73,45 @@ export default {
 };
 
 /**
- * Handle direct messages sent to @telebackfeedback_bot
+ * Handle messages sent to @telebackfeedback_bot
  */
-async function handleIncomingMessage(message, env) {
-  // Only process private chats (ignore messages inside groups)
+async function handleIncomingMessage(message, env, targetGroupId, topicId) {
+  const text = message.text || "";
+
+  // 1. Group / Supergroup diagnostic handler:
+  // If the bot is added to a group, typing /id or /status immediately replies with the chat ID
+  if (message.chat?.type === "group" || message.chat?.type === "supergroup") {
+    if (text.startsWith("/id") || text.startsWith("/chatid") || text.startsWith("/status") || text.startsWith("/help")) {
+      const topicStr = message.message_thread_id ? `\n🧵 *Topic/Thread ID:* \`${message.message_thread_id}\`` : "";
+      await safeSendMessage(env.BOT_TOKEN, {
+        chat_id: message.chat.id,
+        message_thread_id: message.message_thread_id,
+        text: `🤖 *TeleBack Feedback Bot Active*\n\n` +
+              `📍 *This Group Chat ID:* \`${message.chat.id}\`\n` +
+              `🏷️ *Group Title:* ${message.chat.title || "Group"}` +
+              topicStr + `\n\n` +
+              `✅ Bot is connected to this chat.\n` +
+              `To route feedback tickets here, configure in Cloudflare Secrets:\n` +
+              `• \`GROUP_ID\` = \`${message.chat.id}\`` +
+              (message.message_thread_id ? `\n• \`TOPIC_ID\` = \`${message.message_thread_id}\`` : ""),
+        parse_mode: "Markdown"
+      });
+    }
+    return;
+  }
+
+  // Only forward direct private chats from users
   if (message.chat?.type !== "private") {
     return;
   }
 
-  const text = message.text || "";
-
-  // Handle /start and /help commands
-  if (text.startsWith("/start") || text.startsWith("/help")) {
+  // Handle /start, /help, or /status commands in DM
+  if (text.startsWith("/start") || text.startsWith("/help") || text.startsWith("/status")) {
     const welcomeText = 
       "👋 *Welcome to TeleBack Feedback & Diagnostics Bot!*\n\n" +
       "To submit a report, simply paste your copied crash dump or type your feedback below.\n" +
-      "It will be forwarded directly to the developer team with zero-knowledge privacy.";
+      "It will be forwarded directly to the developer team with zero-knowledge privacy.\n\n" +
+      "⚙️ *Group Config Check:* Target Group ID is configured.";
 
     await safeSendMessage(env.BOT_TOKEN, {
       chat_id: message.chat.id,
@@ -106,27 +134,48 @@ async function handleIncomingMessage(message, env) {
   const reportContent = message.text || message.caption || (message.document ? "[Document attached]" : "[Empty report]");
   const fullCard = header + reportContent;
 
+  const parsedThreadId = topicId ? parseInt(topicId, 10) : undefined;
+
   // Forward document or message to developer group
   let sendResult;
   if (message.document) {
-    sendResult = await safeSendDocument(env.BOT_TOKEN, {
-      chat_id: env.GROUP_ID,
+    const payload = {
+      chat_id: targetGroupId,
       document: message.document.file_id,
       caption: fullCard.slice(0, 1024),
       reply_markup: buildTicketMarkup("unreviewed"),
       parse_mode: "Markdown"
-    });
+    };
+    if (parsedThreadId) payload.message_thread_id = parsedThreadId;
+    sendResult = await safeSendDocument(env.BOT_TOKEN, payload);
   } else {
-    sendResult = await safeSendMessage(env.BOT_TOKEN, {
-      chat_id: env.GROUP_ID,
+    const payload = {
+      chat_id: targetGroupId,
       text: fullCard.slice(0, 4096),
       reply_markup: buildTicketMarkup("unreviewed"),
       parse_mode: "Markdown"
-    });
+    };
+    if (parsedThreadId) payload.message_thread_id = parsedThreadId;
+    sendResult = await safeSendMessage(env.BOT_TOKEN, payload);
   }
 
+  // Handle send failure with actionable diagnostic message
   if (!sendResult.ok) {
     console.error("Failed to post ticket card to group:", sendResult.description);
+    await safeSendMessage(env.BOT_TOKEN, {
+      chat_id: message.chat.id,
+      text: `⚠️ *Delivery Failure to Group*\n\n` +
+            `The bot could not forward your report to the designated group (\`${targetGroupId}\`).\n\n` +
+            `*Telegram Error:* \`${sendResult.description || "Unknown error"}\`\n\n` +
+            `🔧 *How to fix:*\n` +
+            `1. Make sure @telebackfeedback_bot is added as a member (or Administrator) to your group.\n` +
+            `2. If your group is a Supergroup, verify the Group ID starts with \`-100\`.\n` +
+            `3. If Topics/Forums are enabled in your group, configure the \`TOPIC_ID\` secret.\n` +
+            `4. You can type \`/id\` inside the group to verify its exact Chat ID!`,
+      reply_to_message_id: message.message_id,
+      parse_mode: "Markdown"
+    });
+    return;
   }
 
   // Send acknowledgement back to user
@@ -203,11 +252,14 @@ async function handleCallbackQuery(call, env) {
  */
 async function safeSendMessage(botToken, payload) {
   let res = await telegramApi(botToken, "sendMessage", payload);
-  if (!res.ok && payload.parse_mode && res.description?.toLowerCase().includes("parse")) {
-    console.warn("Markdown parse failed, retrying plain text:", res.description);
-    const plainPayload = { ...payload };
-    delete plainPayload.parse_mode;
-    res = await telegramApi(botToken, "sendMessage", plainPayload);
+  if (!res.ok && payload.parse_mode) {
+    const desc = (res.description || "").toLowerCase();
+    if (desc.includes("parse") || desc.includes("entity") || desc.includes("entities") || desc.includes("markdown") || desc.includes("tag")) {
+      console.warn("Markdown parse failed, retrying plain text:", res.description);
+      const plainPayload = { ...payload };
+      delete plainPayload.parse_mode;
+      res = await telegramApi(botToken, "sendMessage", plainPayload);
+    }
   }
   return res;
 }
@@ -217,11 +269,14 @@ async function safeSendMessage(botToken, payload) {
  */
 async function safeSendDocument(botToken, payload) {
   let res = await telegramApi(botToken, "sendDocument", payload);
-  if (!res.ok && payload.parse_mode && res.description?.toLowerCase().includes("parse")) {
-    console.warn("Document caption markdown parse failed, retrying plain text:", res.description);
-    const plainPayload = { ...payload };
-    delete plainPayload.parse_mode;
-    res = await telegramApi(botToken, "sendDocument", plainPayload);
+  if (!res.ok && payload.parse_mode) {
+    const desc = (res.description || "").toLowerCase();
+    if (desc.includes("parse") || desc.includes("entity") || desc.includes("entities") || desc.includes("markdown") || desc.includes("tag")) {
+      console.warn("Document caption markdown parse failed, retrying plain text:", res.description);
+      const plainPayload = { ...payload };
+      delete plainPayload.parse_mode;
+      res = await telegramApi(botToken, "sendDocument", plainPayload);
+    }
   }
   return res;
 }
