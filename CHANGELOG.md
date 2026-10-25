@@ -9,76 +9,67 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [2.7.0] - 2026-10-25
 
 ### Added
-- **Selective Single & Multi-File Snapshot Download**: Added `SnapshotFileExplorerDialog.kt` and `SyncManager.extractSnapshotFiles(...)` supporting interactive file browsing of past snapshots, instant filename/extension search filtering, multi-file checkbox selection, and dual-destination exports (restore to linked folder or save to Android's public `Downloads/TeleBack/`).
-- **Selective File Upload**: Added ability to pick arbitrary files directly from device storage and merge them into the latest cloud snapshot without creating redundant snapshot records.
-- **Sync Mode Selector Dialog**: Tapping `[1] sync` prompts users to choose between **Linked Folder Diff Sync** or **Selective Files Upload** (pick from device), eliminating ambiguity and long-press gestures.
-- **In-Place Snapshot Merging**: Differential sync (`[1] sync`) now merges updates directly into the existing latest snapshot in-place (updating manifest message in Telegram and Room DB record), preserving snapshot history without inflating snapshot counts.
-- **Non-Destructive Differential Sync (Smart Merge)**: Missing local files are no longer marked as deleted by default during differential sync; existing remote archive files are preserved as unchanged, protecting fresh installs from accidental data loss.
+- **Selective Snapshot Download**: Interactive file explorer with search filtering, multi-file selection, and dual export destinations (linked folder or system Downloads).
+- **Selective File Upload**: Direct device file picker to upload and merge individual files into the latest cloud snapshot.
+- **Sync Mode Selector**: Prompt on sync to choose between linked folder sync or selective file upload.
+- **In-Place Snapshot Merging**: Differential syncs update the latest snapshot directly, preserving history without redundant records.
+- **Non-Destructive Sync**: Existing remote files are retained when syncing changes from a newly linked or partially populated folder.
 
-### Fixed & Refined
-- **Google Material Adaptive Icon Standard**: Eliminated clashing pre-drawn squircles from the icon asset. Replaced with a pure `108×108dp` full-bleed vector background (`ic_launcher_background.xml`) and a layered cloud/plane emblem strictly centered within the `66dp` safe zone (`ic_launcher_foreground.xml`), preventing corner clipping and cutout gaps on all Android launchers.
-- **Production Release Footprint**: Packaged signed release APK (`TeleBack_v2.7.apk`) at **4.59 MB** (`4,596,923 bytes`) with R8 optimization.
-- **Release Binary Checksum**: SHA-256 `de25dc60a2c1d6733443f41c08de342c19807d555f24959be65ab4120dec41a5`.
-- **Unit Test Coverage**: Added `SelectiveExtractionTest.kt` verifying manifest parsing, in-place snapshot merging, part-by-part decryption, and SHA-256 verification.
+### Changed & Refined
+- **Adaptive Launcher Icon**: Standardized full-bleed vector icon within the launcher safe zone to eliminate clipping across all Android devices.
+- **Leaner App Size**: Reduced release package size down to 4.59 MB (from 4.63 MB in v2.6.0) through asset consolidation.
 
 ---
 
 ## [2.6.0] - 2026-10-24
 
 ### Added
-- **Production R8 / ProGuard Optimization**: Enabled full code shrinking and resource optimization, slashing release APK binary footprint by ~93% from ~66 MB down to **4.63 MB** (`4,854,112 bytes`).
-- **Signed Release Packaging**: Configured release signing configuration targeting `app/build/outputs/apk/release/TeleBack_v2.6.apk` with `keystore.properties` template isolation and git-ignored keys.
-- **Reproducible Build Script**: Added automated verification script (`tools/reproducible_build/`) with zeroed epoch timestamps and bit-for-bit SHA-256 binary validation.
-- **Release Checksums**: Verified release APK hashes (`SHA-256: abe3efad30d208461c2053ce0fb56de59b3f17f2c01f8dcaa1004bf69387c98f`).
-- **Cloudflare Workers Webhook**: Serverless edge webhook handler (`tools/feedback_worker/worker.js`) listening to `@telebackfeedback_bot` updates and forwarding diagnostics to the developer group with zero server runtime costs.
-- **Serverless Interactive Inline Buttons**: Handled `callback_query` actions directly at the edge (`[Mark Reviewed]`, `[Archive]`, `[Discard]`, `[Reopen]`) with live message header updates via `editMessageText`.
-- **Zero-Secret Cloudflare Environment Variables**: Migrated `BOT_TOKEN` and `GROUP_ID` to encrypted Cloudflare secrets (`wrangler secret put`), fully eliminating hardcoded token defaults from the repository.
-- **Crash Recovery & Diagnostics Pipeline**: Built `LogSanitizer.kt` with regex scrubbing for bot tokens, chat IDs, AES master keys, passphrases, and personal folder paths.
-- **Uncaught Exception Interceptor**: App-wide crash interception (`CrashHandler.kt`) writing stacktraces, last 50 console log entries, and device telemetry to `crash_dump.json`.
-- **Diagnostics Modal (`[4] report`)**: Settings feedback modal (`FeedbackDialog.kt`) supporting user comments, previewing sanitized logs, and offering 1-tap clipboard copy + Telegram deep link.
-- **Unit Test Suite**: 34 / 34 unit tests passing cleanly with 100% success rate across release bytecode.
+- **Cloudflare Edge Feedback Pipeline**: Serverless diagnostics webhook with interactive status buttons and encrypted environment secrets.
+- **Crash Recovery & Diagnostics**: Automated sanitization for sensitive keys/tokens, uncaught exception logging, and in-app feedback reporting.
+- **Reproducible Release Build**: Bit-for-bit build verification and R8 optimization, reducing footprint to 4.63 MB.
 
 ### Fixed & Refined
-- **Telegram Webhook Retry Queue Drain**: Configured the Cloudflare Worker to always return HTTP 200 immediately to drain Telegram flood retries triggered by unescaped Markdown symbols.
-- **Defensive Message Formatting**: Implemented HTML/Markdown escaping across ticket cards to avoid Telegram parse errors.
-- **ProGuard Retention Rules**: Configured keep-rules in `proguard-rules.pro` protecting OkHttp, Room, Kotlinx Serialization, and Biometrics reflection.
+- **Webhook Resilience**: Immediate edge acknowledgment to drain Telegram flood retries.
+- **Message Formatting**: Safe escaping across ticket cards to prevent markdown parsing errors.
+- **Code Shrinking Rules**: Hardened retention rules for network, persistence, and biometric libraries.
 
 ---
 
 ## [2.5.0] - 2026-10-22
 
 ### Added
-- **Custom Snapshot Labels**: Interactive prompt dialog (`SnapshotPromptDialog.kt`) on `[1] sync` and `[2] backup` allowing optional human-readable tags stored in manifests and displayed in restore sheets.
-- **Centralized Settings Navigation**: Replaced the separate menu card with a centralized `[8] Settings` command displaying a 2-column sub-grid with a 0.5x retro cyber-glitch transition and dedicated `[<] Back` return action.
-- **Biometric Sentinel**: Added `BiometricLockOverlay.kt` supporting Fingerprint, Face Unlock, and Device PIN to guard app launch, master key export, and vault wipe actions.
-- **In-Memory Zeroization**: Memory wiping of cryptographic key material upon app backgrounding, screen lock, or activity `onStop()`.
-- **Automated WorkManager Background Sync**: Configured periodic sync jobs (`TeleBackSyncWorker.kt`, `SyncWorkScheduler.kt`) with constraints for charging, unmetered Wi-Fi, and battery levels, plus external intent broadcast support (`com.teleback.action.TRIGGER_SYNC`).
+- **Custom Snapshot Labels**: Optional custom tags during backup and sync for clearer restore points.
+- **Centralized Settings Navigation**: Unified sub-menu for configuration, theming, and diagnostics with smooth retro transitions.
+- **Biometric Sentinel**: Fingerprint, Face Unlock, and PIN authentication guarding app entry, key exports, and vault reset.
+- **Key Zeroization**: Automatic in-memory clearing of cryptographic keys when the app leaves the foreground.
+- **Automated Background Sync**: Periodic background sync with charging, Wi-Fi, and battery constraints, plus broadcast trigger support.
 
-### Changed & Cleaned Up
-- **Single Vector Launcher Icon**: Extracted and finalized a single adaptive icon (`ic_launcher_foreground.png`) centered in the 66dp safe zone over `#070A0F` across all density buckets (mdpi to xxxhdpi).
-- **Removed Deprecated Custom Icon Switcher**: Deleted `IconSwitcher.kt` and multi-icon dynamic aliases from `AndroidManifest.xml` and `CustomizationDialog.kt`.
-- **Terminal Navigation Prompt**: Removed `"type 'back' to exit"` and replaced it with `"Tap [<] to return"`. Renamed option `[1]` to `"Themes"`.
+### Changed & Refined
+- **Simplified Icon System**: Streamlined to a unified adaptive brand icon and cleaned up legacy dynamic switcher code.
+- **Navigation Polish**: Clearer return prompts and modernized settings navigation.
 
 ---
 
 ## [2.0.0] - 2026-10-20
 
 ### Added
-- **Multi-Device Remote Snapshot Discovery**: Added `previousManifestMessageId` pointer chaining into `BackupManifest.kt` and implemented `scanCloudSnapshots` in `SyncManager.kt` to crawl and recover historical snapshots on new devices.
-- **Cloud Snapshot Manager (`[4] cloud`)**: Dedicated management dialog (`CloudManagerDialog.kt`) with snapshot file inspection, selective snapshot deletion, orphan chunk cleanup, and safe vault wipe guarded by typing confirmation.
-- **Passphrase-First Vault Unlock**: Redesigned setup wizard Step 3 to support PBKDF2 passphrase key derivation across devices without requiring raw 44-character Base64 keys.
-- **Decryption Race Fix**: Ensured cryptographic keys are persisted and verified on disk before triggering remote manifest scans, preventing raw ciphertext leaks into JSON parsers.
-- **Task Completion Notifications**: Added system alert notifications via `NotificationHelper.kt` on backup, restore, and cloud scan completion (Android 13+ runtime permissions handled).
+- **Multi-Device Snapshot Discovery**: Pointer-chained manifests enabling full historical snapshot recovery on new devices.
+- **Cloud Snapshot Manager**: Dedicated dialog to inspect, prune, or delete snapshots and safely wipe vaults.
+- **Passphrase-First Vault Unlock**: PBKDF2 passphrase derivation across devices without manual raw key entry.
+- **Task Completion Notifications**: System notifications on completed backups, restores, and cloud scans.
+
+### Fixed
+- **Key Persistence Race Condition**: Guaranteed on-disk key verification before initiating remote manifest scans.
 
 ---
 
 ## [1.0.0] - 2026-10-18
 
 ### Added
-- **Chunk Streaming Engine**: 19 MB fixed chunk partitioning (`FileChunker.kt`) with memory-safe buffer streams and atomic `.tbpart` multi-part reassembly.
-- **Resume Journal & Crash Recovery**: Room database pending upload journal (`PendingUploadDao.kt`) with part-level checkpoints.
-- **Network Resilience**: Telegram HTTP 429 flood-wait dynamic delay parser and exponential backoff retry policy (`RetryPolicy.kt`).
-- **Storage Access Framework (SAF)**: Scoped storage recursive directory scanning with SHA-256 digests and persistable URI permissions.
-- **Authenticated Encryption**: On-device AES-256-GCM encryption with 12-byte IVs, PBKDF2 derivation (100k rounds, SHA-256), and `TBK1` binary header.
-- **Monospace CLI Terminal Viewport**: Retro ANSI terminal log stream with categorized levels (`INFO`, `OK`, `WARN`, `ERR`, `SNAP`), 2-column command grid, and real-time connectivity telemetry.
-- **Rolling 10-Snapshot Retention**: Automatic cloud manifest pruning and reference-counted garbage collection for unreferenced chunks.
+- **Chunk Streaming Engine**: 19 MB partitioned chunk streaming with memory-efficient buffers and atomic multi-part reassembly.
+- **Crash-Resilient Upload Journal**: Checkpoint persistence with auto-resumption of interrupted transfers.
+- **Network Resilience**: Adaptive flood-wait delay parsing and exponential backoff retry policies.
+- **Scoped Storage Access**: Storage Access Framework integration with recursive SHA-256 scanning and persistent permissions.
+- **Authenticated Encryption**: On-device AES-256-GCM encryption with PBKDF2 key derivation.
+- **Terminal CLI Viewport**: Retro monospace activity log with color-coded levels, dual-column command grid, and live telemetry.
+- **Snapshot Retention**: Automatic 10-snapshot pruning and garbage collection for unreferenced chunks.
