@@ -1,5 +1,7 @@
 package com.teleback.presentation.terminal
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -32,6 +34,7 @@ import com.teleback.presentation.feedback.FeedbackDialog
 import com.teleback.presentation.onboarding.OnboardingDialog
 import com.teleback.presentation.onboarding.SetupWalkthroughDialog
 import com.teleback.presentation.onboarding.WelcomeDialog
+import com.teleback.presentation.restore.SnapshotFileExplorerDialog
 import com.teleback.presentation.restore.SnapshotPickerSheet
 import com.teleback.presentation.settings.KeysDialog
 import com.teleback.presentation.terminal.components.CommandGrid
@@ -75,6 +78,16 @@ fun TerminalScreen(
     val showCrashDialog by viewModel.showCrashDialog.collectAsState()
     val crashDumpContent by viewModel.crashDumpContent.collectAsState()
     val showFeedbackDialog by viewModel.showFeedbackDialog.collectAsState()
+    val browsingSnapshot by viewModel.browsingSnapshot.collectAsState()
+
+    // File picker launcher for Selective Upload (triggered by long-pressing [1] Sync)
+    val selectiveUploadLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenMultipleDocuments()
+    ) { uris ->
+        if (uris.isNotEmpty()) {
+            viewModel.uploadSelectiveFiles(uris)
+        }
+    }
 
     if (isAppLocked) {
         com.teleback.presentation.security.BiometricLockOverlay(
@@ -193,7 +206,21 @@ fun TerminalScreen(
                     onSelectSnapshot = { snapId ->
                         viewModel.runRestore(snapId)
                     },
+                    onExploreSnapshot = { snap ->
+                        viewModel.openSnapshotExplorer(snap)
+                    },
                     onDismiss = { viewModel.dismissSnapshotPicker() }
+                )
+            }
+
+            // Interactive Snapshot File Explorer & Selective Extraction Dialog
+            browsingSnapshot?.let { snap ->
+                SnapshotFileExplorerDialog(
+                    snapshot = snap,
+                    onExtractFiles = { selectedPaths, destination ->
+                        viewModel.extractFiles(snap.snapshotId, selectedPaths, destination)
+                    },
+                    onDismiss = { viewModel.dismissSnapshotExplorer() }
                 )
             }
 
@@ -250,12 +277,15 @@ fun TerminalScreen(
                 )
             }
 
-            // Custom Snapshot Note/Tag Creation Prompt
+            // Custom Snapshot Note/Tag Creation Prompt & Sync Mode Selector
             promptSyncIsFull?.let { isFull ->
                 SnapshotPromptDialog(
                     isFullBackup = isFull,
-                    onConfirm = { tag ->
+                    onConfirmFolderSync = { tag ->
                         viewModel.confirmSyncWithTag(tag)
+                    },
+                    onPickSelectiveFiles = {
+                        selectiveUploadLauncher.launch(arrayOf("*/*"))
                     },
                     onDismiss = {
                         viewModel.dismissSyncPrompt()

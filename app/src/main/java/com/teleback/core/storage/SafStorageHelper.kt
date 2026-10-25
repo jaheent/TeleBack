@@ -1,7 +1,10 @@
 package com.teleback.core.storage
 
+import android.content.ContentValues
 import android.content.Context
 import android.net.Uri
+import android.os.Environment
+import android.provider.MediaStore
 import androidx.documentfile.provider.DocumentFile
 import com.teleback.core.crypto.ChecksumUtils
 import com.teleback.data.model.LocalFileItem
@@ -53,6 +56,17 @@ class SafStorageHelper(private val context: Context) {
 
     fun openInputStream(uri: Uri): InputStream? {
         return context.contentResolver.openInputStream(uri)
+    }
+
+    /**
+     * Resolves metadata for an arbitrary single file chosen via file picker.
+     */
+    fun resolveSingleFileItem(uri: Uri): LocalFileItem? {
+        val doc = DocumentFile.fromSingleUri(context, uri) ?: return null
+        val name = doc.name ?: "file_${System.currentTimeMillis()}"
+        val size = doc.length()
+        val lastModified = doc.lastModified()
+        return LocalFileItem(uri = uri, relativePath = name, name = name, size = size, lastModified = lastModified)
     }
 
     suspend fun calculateSha256(uri: Uri): String = withContext(Dispatchers.IO) {
@@ -128,6 +142,16 @@ class SafStorageHelper(private val context: Context) {
     }
 
     /**
+     * Interface representing a safe, 2-phase write target.
+     * Bytes are streamed into a temporary location and only committed when integrity is verified.
+     */
+    interface FileWriteTarget {
+        fun write(bytes: ByteArray)
+        fun commit(): Boolean
+        fun abort()
+    }
+
+    /**
      * Opens a temporary `<name>.tbpart` file next to the final destination. Data is streamed into
      * it and only moved over the real file by [RestoreTarget.commit] after the checksum matches,
      * so a failed or interrupted restore never destroys an existing file.
@@ -154,17 +178,42 @@ class SafStorageHelper(private val context: Context) {
         }.getOrNull()
     }
 
+    /**
+     * Opens a safe temporary target directly in the device's public Downloads directory
+     * under the 'TeleBack/' folder hierarchy using Android MediaStore.
+     */
+    suspend fun openDownloadsTarget(relativePath: String): FileWriteTarget? = withContext(Dispatchers.IO) {
+        runCatching {
+            val lastSlash = relativePath.lastIndexOf('/')
+            val finalName = if (lastSlash != -1) relativePath.substring(lastSlash + 1) else relativePath
+            val subDir = if (lastSlash != -1) "TeleBack/${relativePath.substring(0, lastSlash)}" else "TeleBack"
+
+            val values = ContentValues().apply {
+                put(MediaStore.Downloads.DISPLAY_NAME, "$finalName.tbpart")
+                put(MediaStore.Downloads.RELATIVE_PATH, "${Environment.DIRECTORY_DOWNLOADS}/$subDir")
+                put(MediaStore.Downloads.IS_PENDING, 1)
+            }
+            val resolver = context.contentResolver
+            val uri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values) ?: return@runCatching null
+            val out = resolver.openOutputStream(uri) ?: run {
+                resolver.delete(uri, null, null)
+                return@runCatching null
+            }
+            DownloadsWriteTarget(context, uri, finalName, out)
+        }.getOrNull()
+    }
+
     class RestoreTarget internal constructor(
         private val context: Context,
         private val parentDir: DocumentFile,
         private val tempFile: DocumentFile,
         private val finalName: String,
         private val output: java.io.OutputStream
-    ) {
-        fun write(bytes: ByteArray) = output.write(bytes)
+    ) : FileWriteTarget {
+        override fun write(bytes: ByteArray) = output.write(bytes)
 
         /** Replaces any existing file with the verified temp file. Returns false on failure. */
-        fun commit(): Boolean {
+        override fun commit(): Boolean {
             return try {
                 output.flush()
                 output.close()
@@ -190,9 +239,38 @@ class SafStorageHelper(private val context: Context) {
         }
 
         /** Discards the partial file; any pre-existing destination file stays untouched. */
-        fun abort() {
+        override fun abort() {
             runCatching { output.close() }
             runCatching { tempFile.delete() }
+        }
+    }
+
+    class DownloadsWriteTarget internal constructor(
+        private val context: Context,
+        private val uri: Uri,
+        private val finalName: String,
+        private val output: java.io.OutputStream
+    ) : FileWriteTarget {
+        override fun write(bytes: ByteArray) = output.write(bytes)
+
+        override fun commit(): Boolean {
+            return try {
+                output.flush()
+                output.close()
+                val values = ContentValues().apply {
+                    put(MediaStore.Downloads.DISPLAY_NAME, finalName)
+                    put(MediaStore.Downloads.IS_PENDING, 0)
+                }
+                context.contentResolver.update(uri, values, null, null) >= 0
+            } catch (_: Exception) {
+                abort()
+                false
+            }
+        }
+
+        override fun abort() {
+            runCatching { output.close() }
+            runCatching { context.contentResolver.delete(uri, null, null) }
         }
     }
 }

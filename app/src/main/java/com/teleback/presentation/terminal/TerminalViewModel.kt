@@ -96,6 +96,18 @@ class TerminalViewModel(application: Application) : AndroidViewModel(application
     private val _showFeedbackDialog = MutableStateFlow(false)
     val showFeedbackDialog: StateFlow<Boolean> = _showFeedbackDialog.asStateFlow()
 
+    private val _browsingSnapshot = MutableStateFlow<SnapshotEntity?>(null)
+    val browsingSnapshot: StateFlow<SnapshotEntity?> = _browsingSnapshot.asStateFlow()
+
+    fun openSnapshotExplorer(snapshot: SnapshotEntity) {
+        _showSnapshotPicker.value = false
+        _browsingSnapshot.value = snapshot
+    }
+
+    fun dismissSnapshotExplorer() {
+        _browsingSnapshot.value = null
+    }
+
     fun openSettingsView() {
         _isSettingsView.value = true
         addLog(TerminalLog(level = LogLevel.CMD, message = "[SETTINGS] Switched to Settings menu."))
@@ -333,6 +345,23 @@ class TerminalViewModel(application: Application) : AndroidViewModel(application
             return
         }
 
+        if (trimmed.startsWith("browse", ignoreCase = true) || trimmed.startsWith("explore", ignoreCase = true)) {
+            val tokens = trimmed.split("\\s+".toRegex())
+            if (tokens.size > 1) {
+                viewModelScope.launch {
+                    val snap = db.snapshotDao().getSnapshotById(tokens[1])
+                    if (snap != null) {
+                        openSnapshotExplorer(snap)
+                    } else {
+                        addLog(TerminalLog(level = LogLevel.WARN, message = "Snapshot '${tokens[1]}' not found in local catalog."))
+                    }
+                }
+            } else {
+                _showSnapshotPicker.value = true
+            }
+            return
+        }
+
         val command = CliCommand.resolve(trimmed)
         if (command == null) {
             addLog(TerminalLog(level = LogLevel.ERR, message = "Unknown command: '$trimmed'. Type 'help' for command list."))
@@ -439,6 +468,97 @@ class TerminalViewModel(application: Application) : AndroidViewModel(application
                     NotificationHelper.notify(getApplication(), "TeleBack Restore", "Restore Completed")
                 } else {
                     NotificationHelper.notify(getApplication(), "TeleBack Restore", "Restore Failed: ${failureMessage ?: "Error"}")
+                }
+            }
+        }
+    }
+
+    fun extractFiles(
+        snapshotId: String,
+        selectedPaths: Set<String>,
+        destination: com.teleback.domain.DownloadDestination
+    ) {
+        if (selectedPaths.isEmpty()) {
+            addLog(TerminalLog(level = LogLevel.WARN, message = "No files selected for extraction."))
+            return
+        }
+        if (_isBusy.value) {
+            addLog(TerminalLog(level = LogLevel.WARN, message = "Another operation is already running."))
+            return
+        }
+        _isBusy.value = true
+        _browsingSnapshot.value = null
+        SyncForegroundService.start(getApplication())
+
+        viewModelScope.launch {
+            var isSuccess = false
+            var failureMessage: String? = null
+            try {
+                val result = syncManager.extractSnapshotFiles(
+                    snapshotId = snapshotId,
+                    relativePaths = selectedPaths,
+                    destination = destination,
+                    onLog = { addLog(it) }
+                )
+                if (result.isFailure) {
+                    val msg = result.exceptionOrNull()?.message ?: "Unknown error"
+                    addLog(TerminalLog(level = LogLevel.ERR, message = "Extraction failed: $msg"))
+                    failureMessage = msg
+                } else {
+                    isSuccess = true
+                }
+            } catch (e: Exception) {
+                val msg = e.message ?: "Unexpected error"
+                addLog(TerminalLog(level = LogLevel.ERR, message = "Extraction error: $msg"))
+                failureMessage = msg
+            } finally {
+                _isBusy.value = false
+                SyncForegroundService.stop(getApplication())
+                val destTitle = if (destination == com.teleback.domain.DownloadDestination.SYNCED_FOLDER) "Folder Restore" else "Downloads"
+                if (isSuccess) {
+                    NotificationHelper.notify(getApplication(), "TeleBack $destTitle", "${selectedPaths.size} file(s) saved successfully")
+                } else {
+                    NotificationHelper.notify(getApplication(), "TeleBack $destTitle", "Extraction failed: ${failureMessage ?: "Error"}")
+                }
+            }
+        }
+    }
+
+    fun uploadSelectiveFiles(uris: List<android.net.Uri>) {
+        if (uris.isEmpty()) return
+        if (_isBusy.value) {
+            addLog(TerminalLog(level = LogLevel.WARN, message = "Another operation is already running."))
+            return
+        }
+        _isBusy.value = true
+        SyncForegroundService.start(getApplication())
+
+        viewModelScope.launch {
+            var isSuccess = false
+            var failureMessage: String? = null
+            try {
+                val result = syncManager.uploadSelectiveFilesAndMerge(
+                    fileUris = uris,
+                    onLog = { addLog(it) }
+                )
+                if (result.isFailure) {
+                    val msg = result.exceptionOrNull()?.message ?: "Upload failed"
+                    addLog(TerminalLog(level = LogLevel.ERR, message = "Selective upload failed: $msg"))
+                    failureMessage = msg
+                } else {
+                    isSuccess = true
+                }
+            } catch (e: Exception) {
+                val msg = e.message ?: "Unexpected error"
+                addLog(TerminalLog(level = LogLevel.ERR, message = "Selective upload error: $msg"))
+                failureMessage = msg
+            } finally {
+                _isBusy.value = false
+                SyncForegroundService.stop(getApplication())
+                if (isSuccess) {
+                    NotificationHelper.notify(getApplication(), "TeleBack Upload", "${uris.size} file(s) merged into latest snapshot")
+                } else {
+                    NotificationHelper.notify(getApplication(), "TeleBack Upload", "Upload failed: ${failureMessage ?: "Error"}")
                 }
             }
         }

@@ -35,7 +35,8 @@ import com.teleback.presentation.theme.MonospaceFontFamily
 @Composable
 fun SnapshotPromptDialog(
     isFullBackup: Boolean,
-    onConfirm: (tag: String?) -> Unit,
+    onConfirmFolderSync: (tag: String?) -> Unit,
+    onPickSelectiveFiles: () -> Unit,
     onDismiss: () -> Unit
 ) {
     var tagText by remember { mutableStateOf("") }
@@ -53,7 +54,7 @@ fun SnapshotPromptDialog(
                 modifier = Modifier.padding(16.dp)
             ) {
                 Text(
-                    text = if (isFullBackup) "TRIGGER FULL BACKUP [2]" else "TRIGGER DIFF SYNC [1]",
+                    text = if (isFullBackup) "TRIGGER FULL BACKUP [2]" else "SYNC OPTIONS [1]",
                     color = colorScheme.primary,
                     fontSize = 13.sp,
                     fontWeight = FontWeight.Bold,
@@ -61,7 +62,11 @@ fun SnapshotPromptDialog(
                 )
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
-                    text = "Add a custom label to easily identify this snapshot when restoring:",
+                    text = if (isFullBackup) {
+                        "Force a complete upload of all local files. This creates a new snapshot point:"
+                    } else {
+                        "Choose whether to sync from linked folder or upload selective files to merge:"
+                    },
                     color = colorScheme.onSurfaceVariant,
                     fontSize = 10.sp,
                     fontFamily = MonospaceFontFamily
@@ -73,7 +78,7 @@ fun SnapshotPromptDialog(
                     value = tagText,
                     onValueChange = { tagText = it },
                     label = { Text("Snapshot Label (Optional)", fontSize = 11.sp, fontFamily = MonospaceFontFamily) },
-                    placeholder = { Text("e.g. Pre-Update, Trip Photos", fontSize = 11.sp, fontFamily = MonospaceFontFamily) },
+                    placeholder = { Text("e.g. Pre-Update, Work Files", fontSize = 11.sp, fontFamily = MonospaceFontFamily) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                     textStyle = TextStyle(color = colorScheme.onSurface, fontSize = 11.sp, fontFamily = MonospaceFontFamily),
@@ -85,36 +90,75 @@ fun SnapshotPromptDialog(
 
                 Spacer(modifier = Modifier.height(16.dp))
 
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    OutlinedButton(
-                        onClick = onDismiss,
-                        modifier = Modifier.weight(1f),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, colorScheme.outline),
-                        colors = ButtonDefaults.outlinedButtonColors(contentColor = colorScheme.onSurfaceVariant)
+                if (isFullBackup) {
+                    // Full backup: Proceed or Cancel
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        Text("Cancel", fontFamily = MonospaceFontFamily, fontSize = 11.sp)
-                    }
+                        OutlinedButton(
+                            onClick = onDismiss,
+                            modifier = Modifier.weight(1f),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, colorScheme.outline),
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = colorScheme.onSurfaceVariant)
+                        ) {
+                            Text("Cancel", fontFamily = MonospaceFontFamily, fontSize = 11.sp)
+                        }
 
-                    Button(
-                        onClick = {
-                            val cleanTag = tagText.trim().ifEmpty { null }
-                            onConfirm(cleanTag)
-                        },
-                        modifier = Modifier.weight(1f),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = colorScheme.primary,
-                            contentColor = colorScheme.onPrimary
-                        )
+                        Button(
+                            onClick = {
+                                val cleanTag = tagText.trim().ifEmpty { null }
+                                onConfirmFolderSync(cleanTag)
+                            },
+                            modifier = Modifier.weight(1f),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = colorScheme.primary,
+                                contentColor = colorScheme.onPrimary
+                            )
+                        ) {
+                            Text("Proceed [2]", fontFamily = MonospaceFontFamily, fontSize = 11.sp)
+                        }
+                    }
+                } else {
+                    // Diff sync options: Folder Sync vs Selective File Upload
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        Text(
-                            text = "Proceed",
-                            fontFamily = MonospaceFontFamily,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 11.sp
-                        )
+                        Button(
+                            onClick = {
+                                val cleanTag = tagText.trim().ifEmpty { null }
+                                onConfirmFolderSync(cleanTag)
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = colorScheme.primary,
+                                contentColor = colorScheme.onPrimary
+                            )
+                        ) {
+                            Text("📁 Sync Linked Folder", fontFamily = MonospaceFontFamily, fontSize = 11.sp)
+                        }
+
+                        OutlinedButton(
+                            onClick = {
+                                onDismiss()
+                                onPickSelectiveFiles()
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, colorScheme.secondary),
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = colorScheme.secondary)
+                        ) {
+                            Text("📄 Selective Files (Pick from Device)", fontFamily = MonospaceFontFamily, fontSize = 11.sp)
+                        }
+
+                        OutlinedButton(
+                            onClick = onDismiss,
+                            modifier = Modifier.fillMaxWidth(),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, colorScheme.outline.copy(alpha = 0.5f)),
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = colorScheme.onSurfaceVariant)
+                        ) {
+                            Text("Cancel", fontFamily = MonospaceFontFamily, fontSize = 11.sp)
+                        }
                     }
                 }
             }

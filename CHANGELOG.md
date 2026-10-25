@@ -1,8 +1,25 @@
-﻿# Changelog
+# Changelog
 
 All notable changes to the TeleBack project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+---
+
+## [2.7.0] - 2026-10-25
+
+### Added
+- **Selective Single & Multi-File Snapshot Download**: Added `SnapshotFileExplorerDialog.kt` and `SyncManager.extractSnapshotFiles(...)` supporting interactive file browsing of past snapshots, instant filename/extension search filtering, multi-file checkbox selection, and dual-destination exports (restore to linked folder or save to Android's public `Downloads/TeleBack/`).
+- **Selective File Upload**: Added ability to pick arbitrary files directly from device storage and merge them into the latest cloud snapshot without creating redundant snapshot records.
+- **Sync Mode Selector Dialog**: Tapping `[1] sync` prompts users to choose between **Linked Folder Diff Sync** or **Selective Files Upload** (pick from device), eliminating ambiguity and long-press gestures.
+- **In-Place Snapshot Merging**: Differential sync (`[1] sync`) now merges updates directly into the existing latest snapshot in-place (updating manifest message in Telegram and Room DB record), preserving snapshot history without inflating snapshot counts.
+- **Non-Destructive Differential Sync (Smart Merge)**: Missing local files are no longer marked as deleted by default during differential sync; existing remote archive files are preserved as unchanged, protecting fresh installs from accidental data loss.
+
+### Fixed & Refined
+- **Google Material Adaptive Icon Standard**: Eliminated clashing pre-drawn squircles from the icon asset. Replaced with a pure `108×108dp` full-bleed vector background (`ic_launcher_background.xml`) and a layered cloud/plane emblem strictly centered within the `66dp` safe zone (`ic_launcher_foreground.xml`), preventing corner clipping and cutout gaps on all Android launchers.
+- **Production Release Footprint**: Packaged signed release APK (`TeleBack_v2.7.apk`) at **4.59 MB** (`4,596,923 bytes`) with R8 optimization.
+- **Release Binary Checksum**: SHA-256 `de25dc60a2c1d6733443f41c08de342c19807d555f24959be65ab4120dec41a5`.
+- **Unit Test Coverage**: Added `SelectiveExtractionTest.kt` verifying manifest parsing, in-place snapshot merging, part-by-part decryption, and SHA-256 verification.
 
 ---
 

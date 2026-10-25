@@ -177,14 +177,14 @@ private fun SettingsSubGrid(
                 fontFamily = MonospaceFontFamily
             )
             Text(
-                text = "Tap [<] to return",
+                text = "Tap [<] or type 'back' to exit",
                 color = colorScheme.onSurfaceVariant,
                 fontSize = 9.sp,
                 fontFamily = MonospaceFontFamily
             )
         }
 
-        // Row 1: Themes & Vault Keys
+        // Row 1: Themes / Icons & Vault Keys
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(6.dp)
@@ -192,7 +192,7 @@ private fun SettingsSubGrid(
             CustomGridCell(
                 badge = "[1]",
                 name = "theme",
-                label = "Themes",
+                label = "Themes & styles",
                 onClick = onOpenThemes,
                 modifier = Modifier.weight(1f)
             )
@@ -205,7 +205,7 @@ private fun SettingsSubGrid(
             )
         }
 
-        // Row 2: Auto-Sync Scheduler & Bug/Feedback Report
+        // Row 2: Auto-Sync Scheduler & Bug/Feedback Reporter
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(6.dp)
@@ -220,13 +220,14 @@ private fun SettingsSubGrid(
             CustomGridCell(
                 badge = "[4]",
                 name = "report",
-                label = "Bug & feedback",
+                label = "Feedback & crash",
+                badgeColor = colorScheme.secondary,
                 onClick = onOpenFeedback,
                 modifier = Modifier.weight(1f)
             )
         }
 
-        // Row 3: Return to Main
+        // Row 3: Return Back to Main Command Console
         CustomGridCell(
             badge = "[<]",
             name = "back",

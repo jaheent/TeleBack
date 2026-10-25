@@ -29,6 +29,7 @@ import com.teleback.data.model.FileEntry
 import com.teleback.data.model.LocalFileItem
 import com.teleback.data.model.SnapshotManifest
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
@@ -138,11 +139,11 @@ class SyncManager(private val context: Context) {
             }
         }
 
-        // Check for deleted files
+        // Check for remote files absent locally (in non-destructive smart merge, preserve them)
         val localPathSet = localFiles.map { it.relativePath }.toSet()
         for ((remotePath, remoteEntry) in remoteFiles) {
             if (!localPathSet.contains(remotePath)) {
-                diffItems.add(FileDiffItem(remotePath, DiffStatus.DELETED, remoteEntry = remoteEntry))
+                diffItems.add(FileDiffItem(remotePath, DiffStatus.UNCHANGED, remoteEntry = remoteEntry))
             }
         }
 
@@ -278,20 +279,31 @@ class SyncManager(private val context: Context) {
                 }
             }
 
-            // Create Snapshot Manifest
+            // Create Snapshot Manifest or Merge In-Place
+            val isMergeIntoExisting = !effectiveFullBackup && latestSnapshot != null
             val timestamp = System.currentTimeMillis()
-            val timeTag = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date(timestamp))
-            val snapshotId = "snap_$timeTag"
+            val snapshotId = if (isMergeIntoExisting) {
+                latestSnapshot!!.snapshotId
+            } else {
+                val timeTag = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date(timestamp))
+                "snap_$timeTag"
+            }
+            val effectiveTag = tag ?: if (isMergeIntoExisting) latestSnapshot!!.tag else null
 
             val scanResult = safHelper.scanDirectory(folderUri)
 
-            val previousManifestMessageId = db.snapshotDao().getLatestSnapshot()?.manifestMessageId
-                ?: client.getChat(chatId).getOrNull()?.pinnedMessage?.messageId
+            val previousManifestMessageId = if (isMergeIntoExisting) {
+                val oldManifest = runCatching { ManifestManager.json.decodeFromString<SnapshotManifest>(latestSnapshot!!.rawJson) }.getOrNull()
+                oldManifest?.previousManifestMessageId
+            } else {
+                db.snapshotDao().getLatestSnapshot()?.manifestMessageId
+                    ?: client.getChat(chatId).getOrNull()?.pinnedMessage?.messageId
+            }
 
             val manifest = SnapshotManifest(
                 version = 1,
                 snapshotId = snapshotId,
-                tag = tag,
+                tag = effectiveTag,
                 timestamp = timestamp,
                 deviceName = "${Build.MANUFACTURER} ${Build.MODEL}",
                 rootFolderName = folderName,
@@ -304,7 +316,14 @@ class SyncManager(private val context: Context) {
             )
 
             // The manifest is uploaded last: until it lands, the previous snapshot stays intact.
-            onLog(TerminalLog(level = LogLevel.SNAP, message = "Creating snapshot manifest [$snapshotId]..."))
+            onLog(TerminalLog(
+                level = LogLevel.SNAP,
+                message = if (isMergeIntoExisting) {
+                    "Updating & merging latest snapshot [$snapshotId]..."
+                } else {
+                    "Creating snapshot manifest [$snapshotId]..."
+                }
+            ))
             val manifestBytes = ManifestManager.serializeManifest(manifest, if (isEncrypted) masterKey else null)
 
             val manifestMessage = RetryPolicy.execute(onRetry = retryLogger(onLog, "Manifest upload")) {
@@ -312,18 +331,22 @@ class SyncManager(private val context: Context) {
                     chatId = chatId,
                     fileName = "manifest_$snapshotId.json${if (isEncrypted) ".tbk" else ""}",
                     fileBytes = manifestBytes,
-                    caption = "${ManifestManager.MANIFEST_TAG} $snapshotId [${tag ?: "Auto"}] - ${uploadedFileEntries.size} files"
+                    caption = "${ManifestManager.MANIFEST_TAG} $snapshotId [${effectiveTag ?: "Auto"}] - ${uploadedFileEntries.size} files"
                 ).getOrThrow()
             }
 
-            // Pin manifest for instant retrieval
+            // Pin new manifest
             client.pinChatMessage(chatId, manifestMessage.messageId)
+            // If merging into existing and messageId changed, unpin old manifest
+            if (isMergeIntoExisting && latestSnapshot!!.manifestMessageId != manifestMessage.messageId) {
+                client.unpinChatMessage(chatId, latestSnapshot!!.manifestMessageId)
+            }
 
-            // Cache in Room DB
+            // Cache in Room DB (replaces the existing record if isMergeIntoExisting, keeping snapshot list clean)
             db.snapshotDao().insertSnapshot(
                 SnapshotEntity(
                     snapshotId = snapshotId,
-                    tag = tag,
+                    tag = effectiveTag,
                     timestamp = timestamp,
                     rootFolderName = folderName,
                     totalFiles = manifest.totalFiles,
@@ -343,7 +366,14 @@ class SyncManager(private val context: Context) {
                 .filter { it.messageId in committedIds }
                 .forEach { db.pendingUploadDao().delete(it.fileSha256, it.chunkIndex) }
 
-            onLog(TerminalLog(level = LogLevel.OK, message = "Snapshot [$snapshotId] committed & pinned successfully!"))
+            onLog(TerminalLog(
+                level = LogLevel.OK,
+                message = if (isMergeIntoExisting) {
+                    "Snapshot [$snapshotId] merged in-place successfully (No new snapshot created)!"
+                } else {
+                    "Snapshot [$snapshotId] committed & pinned successfully!"
+                }
+            ))
 
             if (skippedFiles.isNotEmpty()) {
                 val names = skippedFiles.take(MAX_SKIPPED_NAMES_LOGGED).joinToString(", ")
@@ -354,10 +384,120 @@ class SyncManager(private val context: Context) {
                 ))
             }
 
-            // Enforce 10-snapshot limit with smart orphan pruning
-            pruneOldSnapshots(client, chatId, onLog)
+            // Only enforce 10-snapshot limit with smart orphan pruning when creating a new snapshot
+            if (!isMergeIntoExisting) {
+                pruneOldSnapshots(client, chatId, onLog)
+            }
 
             manifest
+        }
+    }
+
+    /**
+     * Uploads specific files and merges them directly into the latest snapshot
+     * without creating a new snapshot record.
+     */
+    suspend fun uploadSelectiveFilesAndMerge(
+        fileUris: List<Uri>,
+        onLog: (TerminalLog) -> Unit
+    ): Result<Int> = withContext(Dispatchers.IO) {
+        runCatching {
+            if (fileUris.isEmpty()) return@runCatching 0
+
+            val client = getApiClient() ?: throw IllegalStateException("Bot token missing. Run [0] setup.")
+            val chatId = prefs.chatId.first() ?: throw IllegalStateException("Telegram Group ID missing. Run [0] setup.")
+            val isEncrypted = prefs.isEncryptionEnabled.first()
+            val masterKey = prefs.getOrGenerateMasterKey()
+            val journalKey = if (isEncrypted) keyFingerprint(masterKey) else ""
+
+            val latestSnapshotEntity = db.snapshotDao().getLatestSnapshot()
+                ?: throw IllegalStateException("No existing snapshot found to merge into. Run [1] sync or [2] backup first.")
+
+            val existingManifest = ManifestManager.json.decodeFromString<SnapshotManifest>(latestSnapshotEntity.rawJson)
+
+            onLog(TerminalLog(
+                level = LogLevel.INFO,
+                message = "Selective upload: Merging ${fileUris.size} file(s) into latest snapshot [${existingManifest.tag ?: existingManifest.snapshotId}]..."
+            ))
+
+            val newlyUploadedEntries = mutableListOf<FileEntry>()
+            var processed = 0
+
+            for (uri in fileUris) {
+                val localFile = safHelper.resolveSingleFileItem(uri) ?: continue
+                processed++
+                onLog(TerminalLog(
+                    level = LogLevel.SYNC,
+                    message = "[$processed/${fileUris.size}] Uploading ${localFile.name} (${formatSize(localFile.size)})..."
+                ))
+
+                try {
+                    val entry = uploadFile(client, chatId, localFile, isEncrypted, masterKey, journalKey, onLog)
+                    newlyUploadedEntries.add(entry)
+                    onLog(TerminalLog(level = LogLevel.OK, message = "  ✓ Uploaded & verified: ${localFile.name}"))
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    onLog(TerminalLog(level = LogLevel.ERR, message = "  ✗ Failed ${localFile.name}: ${describe(e)}"))
+                }
+            }
+
+            if (newlyUploadedEntries.isEmpty()) {
+                throw IllegalStateException("None of the selected files were uploaded successfully.")
+            }
+
+            // Merge into existing manifest: replace existing matching paths or append new
+            val mergedFiles = existingManifest.files.toMutableList()
+            for (newEntry in newlyUploadedEntries) {
+                mergedFiles.removeAll { it.relativePath == newEntry.relativePath }
+                mergedFiles.add(newEntry)
+            }
+
+            val updatedManifest = existingManifest.copy(
+                timestamp = System.currentTimeMillis(),
+                totalFiles = mergedFiles.size,
+                totalBytes = mergedFiles.sumOf { it.size },
+                files = mergedFiles
+            )
+
+            // Send updated manifest to Telegram
+            val manifestBytes = ManifestManager.json.encodeToString(updatedManifest).toByteArray(Charsets.UTF_8)
+            val payload = if (isEncrypted) CryptoEngine.encryptBytes(manifestBytes, masterKey) else manifestBytes
+            val manifestFileName = "manifest_${updatedManifest.snapshotId}.tbk"
+            val caption = "TeleBack Snapshot Manifest: [${updatedManifest.tag ?: updatedManifest.snapshotId}] (Updated: ${updatedManifest.totalFiles} files)"
+
+            val sentMsg = client.sendDocument(
+                chatId = chatId,
+                fileName = manifestFileName,
+                fileBytes = payload,
+                caption = caption
+            ).getOrThrow()
+
+            val newManifestFileId = sentMsg.document?.fileId ?: ""
+
+            // Pin updated manifest & unpin old if different message
+            client.pinChatMessage(chatId, sentMsg.messageId)
+            if (latestSnapshotEntity.manifestMessageId != sentMsg.messageId) {
+                client.unpinChatMessage(chatId, latestSnapshotEntity.manifestMessageId)
+            }
+
+            // Update database record in-place with same snapshotId
+            val updatedEntity = latestSnapshotEntity.copy(
+                timestamp = updatedManifest.timestamp,
+                totalFiles = updatedManifest.totalFiles,
+                totalBytes = updatedManifest.totalBytes,
+                manifestMessageId = sentMsg.messageId,
+                manifestFileId = newManifestFileId,
+                rawJson = ManifestManager.json.encodeToString(updatedManifest)
+            )
+            db.snapshotDao().insertSnapshot(updatedEntity)
+
+            onLog(TerminalLog(
+                level = LogLevel.OK,
+                message = "Merge complete! Updated [${updatedManifest.tag ?: updatedManifest.snapshotId}] (Total: ${updatedManifest.totalFiles} files, ${formatSize(updatedManifest.totalBytes)}). No new snapshot created."
+            ))
+
+            newlyUploadedEntries.size
         }
     }
 
@@ -876,6 +1016,93 @@ class SyncManager(private val context: Context) {
     }
 
     /**
+     * Selectively extracts and restores or downloads specific individual files from a snapshot.
+     */
+    suspend fun extractSnapshotFiles(
+        snapshotId: String,
+        relativePaths: Set<String>,
+        destination: DownloadDestination,
+        onProgress: (current: Int, total: Int, currentFile: String) -> Unit = { _, _, _ -> },
+        onLog: (TerminalLog) -> Unit
+    ): Result<Int> = withContext(Dispatchers.IO) {
+        runCatching {
+            val token = prefs.botToken.first() ?: throw IllegalStateException("Bot token not configured")
+            val snapshot = db.snapshotDao().getSnapshotById(snapshotId)
+                ?: throw IllegalStateException("Snapshot '$snapshotId' not found in local vault")
+
+            val manifest = kotlinx.serialization.json.Json.decodeFromString<SnapshotManifest>(snapshot.rawJson)
+            val filesToExtract = manifest.files.filter { it.relativePath in relativePaths }
+            if (filesToExtract.isEmpty()) {
+                throw IllegalStateException("No matching files found in snapshot manifest")
+            }
+
+            val masterKey = if (manifest.isEncrypted) {
+                prefs.masterKey.first()?.takeIf { it.isNotBlank() }
+                    ?: throw IllegalStateException("Master Key missing. Encrypted files cannot be decrypted.")
+            } else ""
+
+            val folderUri = if (destination == DownloadDestination.SYNCED_FOLDER) {
+                val uriStr = prefs.folderUri.first() ?: throw IllegalStateException("No local folder linked")
+                Uri.parse(uriStr)
+            } else null
+
+            val destLabel = if (destination == DownloadDestination.SYNCED_FOLDER) "Linked Folder" else "Downloads/TeleBack/"
+            onLog(TerminalLog(
+                level = LogLevel.INFO,
+                message = "Extracting ${filesToExtract.size} selected file(s) to $destLabel from [${manifest.tag ?: manifest.snapshotId}]..."
+            ))
+
+            val client = TelegramApiClient(token)
+            val state = RestoreState()
+            var succeededCount = 0
+            val failedFiles = mutableListOf<String>()
+
+            for ((idx, fileEntry) in filesToExtract.withIndex()) {
+                ensureActive()
+                onProgress(idx + 1, filesToExtract.size, fileEntry.relativePath)
+                onLog(TerminalLog(
+                    level = LogLevel.SYNC,
+                    message = "[${idx + 1}/${filesToExtract.size}] Downloading ${fileEntry.relativePath} (${SizeFormat.format(fileEntry.size)})..."
+                ))
+
+                try {
+                    val target = when (destination) {
+                        DownloadDestination.SYNCED_FOLDER -> {
+                            safHelper.openRestoreTarget(folderUri!!, fileEntry.relativePath)
+                                ?: throw IllegalStateException("Cannot create destination file in linked folder")
+                        }
+                        DownloadDestination.DOWNLOADS_FOLDER -> {
+                            safHelper.openDownloadsTarget(fileEntry.relativePath)
+                                ?: throw IllegalStateException("Cannot create destination file in Downloads")
+                        }
+                    }
+
+                    restoreFileToTarget(client, target, manifest, fileEntry, masterKey, state, onLog)
+                    succeededCount++
+                    onLog(TerminalLog(
+                        level = LogLevel.OK,
+                        message = "  ✓ Saved: ${fileEntry.relativePath}"
+                    ))
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    failedFiles.add(fileEntry.relativePath)
+                    onLog(TerminalLog(
+                        level = LogLevel.ERR,
+                        message = "  ✗ Failed ${fileEntry.relativePath}: ${describe(e)}"
+                    ))
+                }
+            }
+
+            onLog(TerminalLog(
+                level = if (failedFiles.isEmpty()) LogLevel.OK else LogLevel.WARN,
+                message = "Extraction complete: $succeededCount succeeded, ${failedFiles.size} failed."
+            ))
+            succeededCount
+        }
+    }
+
+    /**
      * Restores one file by streaming it into a `.tbpart` temp file, verifying the whole-file
      * SHA-256, and only then replacing the destination. A failure leaves any existing file intact.
      */
@@ -897,6 +1124,18 @@ class SyncManager(private val context: Context) {
 
         val target = safHelper.openRestoreTarget(folderUri, entry.relativePath)
             ?: throw IllegalStateException("Cannot create destination file")
+        return restoreFileToTarget(client, target, manifest, entry, masterKey, state, onLog)
+    }
+
+    private suspend fun restoreFileToTarget(
+        client: TelegramApiClient,
+        target: SafStorageHelper.FileWriteTarget,
+        manifest: SnapshotManifest,
+        entry: FileEntry,
+        masterKey: String,
+        state: RestoreState,
+        onLog: (TerminalLog) -> Unit
+    ): RestoreOutcome {
         val digest = MessageDigest.getInstance("SHA-256")
 
         fun plain(bytes: ByteArray): ByteArray {
@@ -1001,4 +1240,9 @@ class SyncManager(private val context: Context) {
     }
 
     private fun formatSize(bytes: Long): String = SizeFormat.format(bytes)
+}
+
+enum class DownloadDestination {
+    SYNCED_FOLDER,
+    DOWNLOADS_FOLDER
 }
