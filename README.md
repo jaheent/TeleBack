@@ -11,7 +11,7 @@
     <a href="https://kotlinlang.org/"><img src="https://img.shields.io/badge/Language-Kotlin%202.0-7F52FF?logo=kotlin&logoColor=white" alt="Kotlin" /></a>
     <a href="https://developer.android.com/jetpack/compose"><img src="https://img.shields.io/badge/UI-Jetpack%20Compose-4285F4?logo=jetpackcompose&logoColor=white" alt="Compose" /></a>
     <a href="https://en.wikipedia.org/wiki/Galois/Counter_Mode"><img src="https://img.shields.io/badge/Security-AES--256--GCM-critical" alt="Encryption" /></a>
-    <a href="LICENSE.md"><img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License" /></a>
+    <a href="LICENSE.md"><img src="https://img.shields.io/badge/License-MIT%20(Commercial%20Approval%20Req.)-blue.svg" alt="License" /></a>
   </p>
 
 </div>
@@ -125,4 +125,4 @@ TeleBack operates under a strict **Zero-Knowledge** architecture:
 
 ## 📄 License
 
-This project is licensed under the MIT License - see the [LICENSE.md](LICENSE.md) file for details.
+This project is licensed under a modified MIT License requiring prior authorization for commercial use - see the [LICENSE.md](LICENSE.md) file for details.
