@@ -1,8 +1,6 @@
 <div align="center">
 
-  <img width="180" alt="Teleback App Icon" src="https://github.com/user-attachments/assets/8fcf493b-8f16-48cd-9377-a28ca010de8c" />
-
-  <h1>TeleBack</h1>
+<h1>TeleBack</h1>
 
   <p><strong>Decentralized personal backup, restore, and sync engine for Android 15+ powered by private Telegram groups with authenticated on-device AES-256-GCM encryption.</strong></p>
 
