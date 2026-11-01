@@ -6,6 +6,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.8.0] - 2026-11-01
+
+### Added
+- **Hierarchical Accordion Tree Explorer**: Interactive virtualized folder tree in `SnapshotFileExplorerDialog` with expandable/collapsible directory nodes, recursive `TriStateCheckbox` selection, aggregate file/byte metrics, and a 4-level indentation cap with parent directory hints.
+- **Inline Single-File Extraction**: Per-file quick action buttons to extract individual files directly to the linked folder or system `Downloads/TeleBack` while keeping the explorer dialog open.
+- **In-Dialog Extraction Banner**: Auto-dismissing (3s) status banner inside the snapshot explorer displaying live extraction progress and completion feedback.
+
+### Changed & Refined
+- **Modernized Android 15 App Icon (Decentralized Mesh Vault)**: Upgraded adaptive launcher background and foreground vector drawables within the 66dp safe zone (radius ≤ 29.58dp) with hexagonal data mesh, vault shackle, 3D paper plane, and emerald status beacon.
+- **Leaner App Size**: Reduced release package size down to 4.40 MB (from 4.59 MB in v2.7.0) through R8 optimization and vector asset consolidation.
+
+---
+
 ## [2.7.0] - 2026-10-25
 
 ### Added
