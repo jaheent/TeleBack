@@ -123,6 +123,16 @@ The compiled APK will be located at:
 
 ---
 
+## ⚡ Telegram Bot API: Built for Privacy & Longevity
+
+TeleBack intentionally uses the **standard Telegram Bot API** (`api.telegram.org`) rather than requiring full MTProto user-account logins (`api_id` / `api_hash` + phone number + 2FA). This design keeps your personal Telegram account 100% isolated from the app—you never hand over your phone number, SMS login code, or personal chats—while engineering around Telegram's bot protocol boundary automatically:
+
+| Telegram Bot Boundary | What It Means for You | How TeleBack Turns It Into an Advantage |
+| :--- | :--- | :--- |
+| **20 MB Single-File Download Ceiling** | Standard Telegram bots can only fetch individual files up to 20 MB via `getFile` on `api.telegram.org`. | **19 MB Smart Chunk Streaming & Selective Tree Extraction**: Files of any size are transparently sliced into **19 MB AES-256-GCM encrypted chunks** on-device, verified via SHA-256, and reassembled bit-for-bit on restore—allowing you to back up multi-gigabyte files on a free account and selectively extract individual files or folders from the hierarchical tree explorer without downloading the entire snapshot. |
+
+---
+
 ## 🛡️ Security & Privacy Notice
 
 TeleBack operates under a strict **Zero-Knowledge** architecture:
