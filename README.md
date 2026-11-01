@@ -142,6 +142,12 @@ TeleBack operates under a strict **Zero-Knowledge** architecture:
 
 ---
 
-## 📄 License
+## 📄 License & Assets Disclaimer
 
-This project is licensed under a modified MIT License requiring prior authorization for commercial use - see the [LICENSE.md](LICENSE.md) file for details.
+This project is licensed under a modified MIT License requiring prior authorization for commercial use — see the [LICENSE.md](LICENSE.md) file for details.
+
+### Icon Design, Visual Assets & Trademark Notice
+- **Non-Affiliation with Telegram**: **TeleBack** is an independent open-source project and is **not affiliated with, endorsed by, or sponsored by Telegram FZ-LLC** or any of its subsidiaries. "Telegram" and the paper-plane concept are trademarks of their respective owners, referenced strictly to describe interoperability with the public Telegram Bot API.
+- **Visual Inspiration & Third-Party Motifs**: The launcher iconography and branding assets (`assets/`, adaptive vector drawables) are custom-synthesized vector compositions inspired by general public iconography motifs (paper plane, cloud storage, and circuit-shield security emblems). All original third-party design inspirations and trademarks remain the property of their respective creators.
+- **Good-Faith Attribution & Takedown Policy**: No copyright or trademark infringement is intended. If you are a creator or rightsholder and believe any visual element or asset in this repository closely resembles your protected work or requires specific attribution/modification, please reach out via the **in-app Feedback section (`Settings → Feedback`)** and it will be promptly credited, updated, or replaced.
+- **Asset Usage Restrictions**: Custom SVG/PNG branding, launcher drawables, and identity assets generated for TeleBack are intended solely for identifying this project and remain subject to the non-commercial / prior-approval terms outlined in [LICENSE.md](LICENSE.md).
