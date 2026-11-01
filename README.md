@@ -12,7 +12,7 @@
     <a href="LICENSE.md"><img src="https://img.shields.io/badge/License-MIT%20(Commercial%20Approval%20Req.)-blue.svg" alt="License" /></a>
   </p>
 
-  ![alt text](image.png)
+![alt text](teleback_barcode.png)
   https://t.me/teleback_push
 
 </div>
