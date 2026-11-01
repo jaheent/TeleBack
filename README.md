@@ -1,6 +1,8 @@
 <div align="center">
 
-<h1>TeleBack</h1>
+  <img src="assets/Icon.png" alt="TeleBack Logo" width="110" />
+
+  <h1>TeleBack</h1>
 
   <p><strong>Decentralized personal backup, restore, and sync engine for Android 15+ powered by private Telegram groups with authenticated on-device AES-256-GCM encryption.</strong></p>
 
@@ -12,8 +14,13 @@
     <a href="LICENSE.md"><img src="https://img.shields.io/badge/License-MIT%20(Commercial%20Approval%20Req.)-blue.svg" alt="License" /></a>
   </p>
 
-![alt text](teleback_barcode.png)
-  https://t.me/teleback_push
+  <p>
+    <a href="https://t.me/teleback_push">
+      <img src="assets/teleback_barcode.png" alt="TeleBack Telegram Channel QR Code" width="220" />
+    </a>
+    <br />
+    <a href="https://t.me/teleback_push"><strong>https://t.me/teleback_push</strong></a>
+  </p>
 
 </div>
 
