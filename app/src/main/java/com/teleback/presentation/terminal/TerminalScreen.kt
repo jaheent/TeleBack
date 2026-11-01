@@ -75,6 +75,7 @@ fun TerminalScreen(
     val isAppLocked by viewModel.isAppLocked.collectAsState()
     val isSettingsView by viewModel.isSettingsView.collectAsState()
     val promptSyncIsFull by viewModel.promptSyncIsFull.collectAsState()
+    val extractionBanner by viewModel.extractionBanner.collectAsState()
     val showCrashDialog by viewModel.showCrashDialog.collectAsState()
     val crashDumpContent by viewModel.crashDumpContent.collectAsState()
     val showFeedbackDialog by viewModel.showFeedbackDialog.collectAsState()
@@ -217,8 +218,11 @@ fun TerminalScreen(
             browsingSnapshot?.let { snap ->
                 SnapshotFileExplorerDialog(
                     snapshot = snap,
-                    onExtractFiles = { selectedPaths, destination ->
-                        viewModel.extractFiles(snap.snapshotId, selectedPaths, destination)
+                    isBusy = isBusy,
+                    extractionBanner = extractionBanner,
+                    onClearBanner = { viewModel.clearExtractionBanner() },
+                    onExtractFiles = { selectedPaths, destination, dismissDialog ->
+                        viewModel.extractFiles(snap.snapshotId, selectedPaths, destination, dismissDialog)
                     },
                     onDismiss = { viewModel.dismissSnapshotExplorer() }
                 )

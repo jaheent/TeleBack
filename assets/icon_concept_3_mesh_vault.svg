@@ -1,0 +1,60 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 108 108" width="108" height="108" fill="none">
+  <defs>
+    <!-- Background Gradient: Deep Tech Oceanic -->
+    <linearGradient id="bgMeshVault" x1="108" y1="0" x2="0" y2="108" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#0891B2" />
+      <stop offset="50%" stop-color="#0369A1" />
+      <stop offset="100%" stop-color="#0C1425" />
+    </linearGradient>
+
+    <!-- Paper Plane Main Body Gradient -->
+    <linearGradient id="planeBodyGrad" x1="40" y1="35" x2="75" y2="55" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#FFFFFF" />
+      <stop offset="50%" stop-color="#F0F9FF" />
+      <stop offset="100%" stop-color="#BAE6FD" />
+    </linearGradient>
+  </defs>
+
+  <!-- Background Base -->
+  <rect width="108" height="108" rx="26" fill="url(#bgMeshVault)" />
+
+  <!-- Center Artwork (54, 54) -->
+  <g id="foreground" transform="translate(54, 54)">
+    <!-- Hexagonal Data Mesh Network Lines -->
+    <path d="M -22,-12 L 0,-24 L 22,-12 L 22,14 L 0,24 L -22,14 Z"
+          stroke="#00E5FF"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          fill="none" />
+
+    <!-- 6 Hexagonal Network Nodes -->
+    <circle cx="-22" cy="-12" r="3.5" fill="#00E5FF" />
+    <circle cx="0" cy="-24" r="3.5" fill="#00E5FF" />
+    <circle cx="22" cy="-12" r="3.5" fill="#00E5FF" />
+    <circle cx="22" cy="14" r="3.5" fill="#00E5FF" />
+    <circle cx="0" cy="24" r="3.5" fill="#00E5FF" />
+    <circle cx="-22" cy="14" r="3.5" fill="#00E5FF" />
+
+    <!-- Vault Padlock Shackle Loop -->
+    <path d="M -8,-6 L -8,-14 C -8,-18.5 -4.5,-22 0,-22 C 4.5,-22 8,-18.5 8,-14 L 8,-6"
+          stroke="#FFFFFF"
+          stroke-width="3"
+          stroke-linecap="round"
+          fill="none"
+          opacity="0.9" />
+
+    <!-- Ascending Telegram Paper Plane -->
+    <g id="telegram-plane">
+      <!-- Main Upper Wing -->
+      <path d="M -14,-2 L 18,-15 L 6,15 L 0,4 Z" fill="url(#planeBodyGrad)" />
+      <!-- 3D Under-Wing Shadow Fold -->
+      <path d="M 0,4 L 4,-3 L 18,-15 L 0,4 Z" fill="#0284C7" opacity="0.75" />
+      <!-- Keel / Rudder Accent -->
+      <path d="M 0,4 L 0,10 L 4,6 Z" fill="#00E5FF" />
+    </g>
+
+    <!-- Real-time Status Beacon -->
+    <circle cx="16" cy="-14" r="3" fill="#10B981" stroke="#FFFFFF" stroke-width="1.2" />
+  </g>
+</svg>

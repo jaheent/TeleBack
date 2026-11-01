@@ -14,6 +14,7 @@ import com.teleback.data.local.AppDatabase
 import com.teleback.data.local.AppPreferences
 import com.teleback.data.local.SnapshotEntity
 import com.teleback.domain.SyncManager
+import com.teleback.presentation.restore.ExtractionBanner
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -98,6 +99,13 @@ class TerminalViewModel(application: Application) : AndroidViewModel(application
 
     private val _browsingSnapshot = MutableStateFlow<SnapshotEntity?>(null)
     val browsingSnapshot: StateFlow<SnapshotEntity?> = _browsingSnapshot.asStateFlow()
+
+    private val _extractionBanner = MutableStateFlow<ExtractionBanner?>(null)
+    val extractionBanner: StateFlow<ExtractionBanner?> = _extractionBanner.asStateFlow()
+
+    fun clearExtractionBanner() {
+        _extractionBanner.value = null
+    }
 
     fun openSnapshotExplorer(snapshot: SnapshotEntity) {
         _showSnapshotPicker.value = false
@@ -476,7 +484,8 @@ class TerminalViewModel(application: Application) : AndroidViewModel(application
     fun extractFiles(
         snapshotId: String,
         selectedPaths: Set<String>,
-        destination: com.teleback.domain.DownloadDestination
+        destination: com.teleback.domain.DownloadDestination,
+        dismissDialog: Boolean = false
     ) {
         if (selectedPaths.isEmpty()) {
             addLog(TerminalLog(level = LogLevel.WARN, message = "No files selected for extraction."))
@@ -487,7 +496,14 @@ class TerminalViewModel(application: Application) : AndroidViewModel(application
             return
         }
         _isBusy.value = true
-        _browsingSnapshot.value = null
+        if (dismissDialog) {
+            _browsingSnapshot.value = null
+        }
+        val targetDesc = if (selectedPaths.size == 1) selectedPaths.first() else "${selectedPaths.size} file(s)"
+        _extractionBanner.value = ExtractionBanner(
+            message = "Extracting $targetDesc...",
+            isSuccess = true
+        )
         SyncForegroundService.start(getApplication())
 
         viewModelScope.launch {
@@ -504,13 +520,26 @@ class TerminalViewModel(application: Application) : AndroidViewModel(application
                     val msg = result.exceptionOrNull()?.message ?: "Unknown error"
                     addLog(TerminalLog(level = LogLevel.ERR, message = "Extraction failed: $msg"))
                     failureMessage = msg
+                    _extractionBanner.value = ExtractionBanner(
+                        message = "✗ Extraction failed: $msg",
+                        isSuccess = false
+                    )
                 } else {
                     isSuccess = true
+                    val destLabel = if (destination == com.teleback.domain.DownloadDestination.SYNCED_FOLDER) "Linked Folder" else "Downloads"
+                    _extractionBanner.value = ExtractionBanner(
+                        message = "✓ Saved $targetDesc to $destLabel",
+                        isSuccess = true
+                    )
                 }
             } catch (e: Exception) {
                 val msg = e.message ?: "Unexpected error"
                 addLog(TerminalLog(level = LogLevel.ERR, message = "Extraction error: $msg"))
                 failureMessage = msg
+                _extractionBanner.value = ExtractionBanner(
+                    message = "✗ Error: $msg",
+                    isSuccess = false
+                )
             } finally {
                 _isBusy.value = false
                 SyncForegroundService.stop(getApplication())

@@ -39,3 +39,13 @@ re-read whole files.
 After big code changes, refresh the graph with `trail build` (deterministic,
 no API key, $0).
 <!-- trail:end -->
+
+---
+
+## Workspace Rules & Constraints
+
+### Explicit Confirmation for Builds and Tests (MANDATORY)
+- The agent is **STRICTLY FORBIDDEN** from running Gradle builds (`gradlew assembleDebug`, `gradlew build`, etc.), compilation tasks, unit tests, or end-to-end test suites automatically on its own initiative.
+- The agent **MUST ALWAYS** ask the user for explicit confirmation in chat and receive direct approval before executing any build or test command.
+- Proposing code changes, design drafts, or vector drawables does NOT grant permission to build or compile. Wait for the user's explicit command to test or build.
+
