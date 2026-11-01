@@ -16,10 +16,10 @@
 
   <p>
     <a href="https://t.me/teleback_push">
-      <img src="assets/teleback_barcode.png" alt="TeleBack Telegram Channel QR Code" width="220" />
+      <img src="assets/teleback_barcode.png" alt="TeleBack Telegram Channel QR Code"/>
     </a>
     <br />
-    <a href="https://t.me/teleback_push"><strong>https://t.me/teleback_push</strong></a>
+    <a href="https://t.me/teleback_push">https://t.me/teleback_push</a>
   </p>
 
 </div>
