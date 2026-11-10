@@ -6,66 +6,84 @@
     android:viewportWidth="108"
     android:viewportHeight="108">
 
-    <!-- Strictly Centered within 66dp Safe Zone (Center at 54, 54) -->
+    <!-- Strictly Centered within 66dp Safe Zone (Center at 54, 54; Max Radius <= 28.4dp) -->
     <group
         android:pivotX="54"
         android:pivotY="54">
 
-        <!-- 1. Hexagonal Data Mesh Network Lines -->
+        <!-- 1. Integrated Wing PCB Circuit Traces -->
         <path
-            android:pathData="M32,42 L54,30 L76,42 L76,68 L54,78 L32,68 Z"
-            android:strokeColor="#00E5FF"
-            android:strokeWidth="2"
+            android:pathData="M41.33,46.34 L35.26,46.34 Q32.88,46.34 32.88,43.97 L32.88,39.22 M38.16,53.47 L31.82,53.47 M64.56,65.35 L70.90,65.35 Q73.27,65.35 73.27,67.73 L73.27,71.69 M68.78,58.49 L76.18,58.49"
+            android:strokeColor="#1B3B8B"
+            android:strokeWidth="1.85"
             android:strokeLineCap="round"
             android:strokeLineJoin="round" />
 
-        <!-- 2. Hexagonal Network Mesh Nodes -->
+        <!-- 2. Circuit Terminal Nodes -->
         <path
-            android:fillColor="#00E5FF"
-            android:pathData="M32,42 m-3.5,0 a3.5,3.5 0 1,0 7,0 a3.5,3.5 0 1,0 -7,0 M54,30 m-3.5,0 a3.5,3.5 0 1,0 7,0 a3.5,3.5 0 1,0 -7,0 M76,42 m-3.5,0 a3.5,3.5 0 1,0 7,0 a3.5,3.5 0 1,0 -7,0 M76,68 m-3.5,0 a3.5,3.5 0 1,0 7,0 a3.5,3.5 0 1,0 -7,0 M54,78 m-3.5,0 a3.5,3.5 0 1,0 7,0 a3.5,3.5 0 1,0 -7,0 M32,68 m-3.5,0 a3.5,3.5 0 1,0 7,0 a3.5,3.5 0 1,0 -7,0" />
+            android:fillColor="#E8F3FF"
+            android:strokeColor="#1B3B8B"
+            android:strokeWidth="1.85"
+            android:pathData="M32.88,36.58 m-2.64,0 a2.64,2.64 0 1,0 5.28,0 a2.64,2.64 0 1,0 -5.28,0 M29.18,53.47 m-2.64,0 a2.64,2.64 0 1,0 5.28,0 a2.64,2.64 0 1,0 -5.28,0 M78.82,58.49 m-2.64,0 a2.64,2.64 0 1,0 5.28,0 a2.64,2.64 0 1,0 -5.28,0 M73.27,74.33 m-2.64,0 a2.64,2.64 0 1,0 5.28,0 a2.64,2.64 0 1,0 -5.28,0" />
 
-        <!-- 3. Vault Padlock Shackle Loop -->
+        <!-- 3. Upper Left Wing (Cloud Ice-Blue #E1F0FF) -->
         <path
-            android:pathData="M46,48 L46,40 C46,35.5 49.5,32 54,32 C58.5,32 62,35.5 62,40 L62,48"
-            android:strokeColor="#FFFFFF"
-            android:strokeAlpha="0.9"
-            android:strokeWidth="3"
-            android:strokeLineCap="round" />
+            android:fillColor="#E1F0FF"
+            android:strokeColor="#1B3B8B"
+            android:strokeWidth="2.0"
+            android:strokeLineJoin="round"
+            android:pathData="M35.78,49.78 L71.95,32.09 Q75.38,30.50 74.86,34.20 L54.79,56.90 L45.82,53.74 C41.33,52.15 37.90,51.62 35.78,49.78 Z" />
 
-        <!-- 4. Ascending Telegram Paper Plane: Main Wing -->
+        <!-- 4. Central Fuselage Fold (Deep Cyan #0096C7) -->
         <path
-            android:pathData="M40,52 L72,39 L60,69 L54,58 Z">
+            android:fillColor="#0096C7"
+            android:strokeColor="#1B3B8B"
+            android:strokeWidth="2.0"
+            android:strokeLineJoin="round"
+            android:pathData="M45.82,53.74 L74.33,33.14 L55.06,66.94 Q52.94,70.10 51.10,66.41 L45.82,53.74 Z" />
+
+        <!-- 5. Lower Right Wing (Shield Vibrant Cyan Gradient) -->
+        <path
+            android:strokeColor="#1B3B8B"
+            android:strokeWidth="2.0"
+            android:strokeLineJoin="round"
+            android:pathData="M54.79,56.90 L74.86,34.20 L71.95,64.82 Q71.42,68.26 68.26,66.14 L54.79,56.90 Z">
             <aapt:attr name="android:fillColor">
                 <gradient
-                    android:startX="40"
-                    android:startY="35"
-                    android:endX="75"
-                    android:endY="55"
+                    android:startX="54.79"
+                    android:startY="34.20"
+                    android:endX="74.86"
+                    android:endY="68.26"
                     android:type="linear">
-                    <item android:color="#FFFFFF" android:offset="0.0" />
-                    <item android:color="#F0F9FF" android:offset="0.5" />
-                    <item android:color="#BAE6FD" android:offset="1.0" />
+                    <item android:color="#00C4EB" android:offset="0.0" />
+                    <item android:color="#0096C7" android:offset="1.0" />
                 </gradient>
             </aapt:attr>
         </path>
 
-        <!-- 5. Ascending Telegram Paper Plane: 3D Under-Wing Shadow Fold -->
+        <!-- 6. Integrated Keyhole Lock Core at Fuselage Intersection -->
         <path
-            android:fillColor="#0284C7"
-            android:fillAlpha="0.75"
-            android:pathData="M54,58 L58,51 L72,39 L54,58 Z" />
+            android:fillColor="#E8F3FF"
+            android:strokeColor="#1B3B8B"
+            android:strokeWidth="1.85"
+            android:pathData="M56.90,51.10 m-3.17,0 a3.17,3.17 0 1,0 6.34,0 a3.17,3.17 0 1,0 -6.34,0" />
+        <path
+            android:pathData="M55.32,53.74 L52.68,58.22"
+            android:strokeColor="#1B3B8B"
+            android:strokeWidth="2.0"
+            android:strokeLineCap="round" />
 
-        <!-- 6. Ascending Telegram Paper Plane: Keel / Rudder Accent -->
+        <!-- 7. Signature Trailing Signal / Motion Waves -->
         <path
-            android:fillColor="#00E5FF"
-            android:pathData="M54,58 L54,64 L58,60 Z" />
-
-        <!-- 7. Real-Time Status Beacon (Emerald with Pure White Ring) -->
+            android:pathData="M38.42,62.98 A6.86,6.86 0 0,0 47.14,62.45"
+            android:strokeColor="#1B3B8B"
+            android:strokeWidth="2.0"
+            android:strokeLineCap="round" />
         <path
-            android:fillColor="#10B981"
-            android:strokeColor="#FFFFFF"
-            android:strokeWidth="1.2"
-            android:pathData="M70,40 m-3,0 a3,3 0 1,0 6,0 a3,3 0 1,0 -6,0" />
+            android:pathData="M33.67,60.07 A12.41,12.41 0 0,0 49.78,67.73"
+            android:strokeColor="#00B4D8"
+            android:strokeWidth="2.0"
+            android:strokeLineCap="round" />
 
     </group>
 </vector>

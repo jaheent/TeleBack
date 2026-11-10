@@ -1,0 +1,132 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 600" width="960" height="600">
+  <defs>
+    <linearGradient id="winBg1" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0A0E17" />
+      <stop offset="100%" stop-color="#0F172A" />
+    </linearGradient>
+  </defs>
+
+  <!-- Outer Desktop Window Frame -->
+  <rect width="960" height="600" rx="12" fill="url(#winBg1)" stroke="#00E5FF" stroke-width="2" />
+
+  <!-- Desktop Title Bar (Windows / macOS / Linux Window Controls) -->
+  <rect x="2" y="2" width="956" height="38" rx="10" fill="#111827" />
+  <circle cx="24" cy="21" r="6" fill="#EF4444" />
+  <circle cx="44" cy="21" r="6" fill="#F59E0B" />
+  <circle cx="64" cy="21" r="6" fill="#10B981" />
+  <text x="480" y="26" text-anchor="middle" fill="#00E5FF" font-family="monospace" font-size="13" font-weight="bold">TELEBACK DESKTOP v2.9 // ENCRYPTED CLOUD VAULT (AES-256-GCM)</text>
+  <text x="936" y="25" text-anchor="end" fill="#10B981" font-family="monospace" font-size="11">● BOT ONLINE (@vault_bot)</text>
+  <line x1="0" y1="40" x2="960" y2="40" stroke="#1E293B" stroke-width="2" />
+
+  <!-- ==================== LEFT SIDEBAR (250px): COMMAND RAIL & TELEMETRY ==================== -->
+  <rect x="2" y="41" width="250" height="557" fill="#0D1322" />
+  <line x1="252" y1="40" x2="252" y2="600" stroke="#1E293B" stroke-width="2" />
+
+  <!-- Linked Vault Card -->
+  <rect x="14" y="54" width="226" height="74" rx="6" fill="#131C31" stroke="#00E5FF" stroke-width="1" />
+  <text x="24" y="74" fill="#00E5FF" font-family="monospace" font-size="11" font-weight="bold">VAULT TELEMETRY</text>
+  <text x="24" y="92" fill="#94A3B8" font-family="monospace" font-size="10">Group:  My Private Vault</text>
+  <text x="24" y="106" fill="#94A3B8" font-family="monospace" font-size="10">Folder: ~/Documents/Vault</text>
+  <text x="24" y="120" fill="#10B981" font-family="monospace" font-size="10">Sync:   Auto (6h) • 10 Snaps</text>
+
+  <!-- Vertical Command Rail -->
+  <text x="16" y="150" fill="#64748B" font-family="monospace" font-size="10" font-weight="bold">ACTIONS &amp; COMMANDS</text>
+
+  <g font-family="monospace" font-size="11">
+    <rect x="14" y="160" width="226" height="32" rx="4" fill="#00E5FF" fill-opacity="0.15" stroke="#00E5FF" stroke-width="1" />
+    <text x="26" y="180" fill="#00E5FF" font-weight="bold">[1] sync      Diff Update</text>
+
+    <rect x="14" y="198" width="226" height="32" rx="4" fill="#131C31" stroke="#1E293B" />
+    <text x="26" y="218" fill="#E2E8F0">[2] backup    Full Backup</text>
+
+    <rect x="14" y="236" width="226" height="32" rx="4" fill="#131C31" stroke="#1E293B" />
+    <text x="26" y="256" fill="#E2E8F0">[3] restore   Snapshots</text>
+
+    <rect x="14" y="274" width="226" height="32" rx="4" fill="#131C31" stroke="#1E293B" />
+    <text x="26" y="294" fill="#E2E8F0">[4] cloud     Vault Manager</text>
+
+    <rect x="14" y="312" width="226" height="32" rx="4" fill="#131C31" stroke="#1E293B" />
+    <text x="26" y="332" fill="#E2E8F0">[5] status    Local Diff</text>
+
+    <rect x="14" y="350" width="226" height="32" rx="4" fill="#131C31" stroke="#1E293B" />
+    <text x="26" y="370" fill="#E2E8F0">[6] test      Ping Bot/Chat</text>
+
+    <rect x="14" y="388" width="226" height="32" rx="4" fill="#131C31" stroke="#1E293B" />
+    <text x="26" y="408" fill="#E2E8F0">[8] settings  Keys &amp; Theme</text>
+
+    <rect x="14" y="426" width="226" height="32" rx="4" fill="#131C31" stroke="#00E5FF" stroke-dasharray="3 3" />
+    <text x="26" y="446" fill="#38BDF8">[0] setup     Quick / Clone QR</text>
+  </g>
+
+  <!-- Drag & Drop Upload Zone at Bottom Left -->
+  <rect x="14" y="474" width="226" height="110" rx="6" fill="#0F172A" stroke="#38BDF8" stroke-width="1" stroke-dasharray="5 5" />
+  <text x="127" y="520" text-anchor="middle" fill="#38BDF8" font-family="monospace" font-size="11" font-weight="bold">+ DROP FILES TO UPLOAD</text>
+  <text x="127" y="540" text-anchor="middle" fill="#64748B" font-family="monospace" font-size="9">Encrypted 19 MB Chunk Stream</text>
+
+  <!-- ==================== TOP MAIN WORKSPACE: SNAPSHOT ACCORDION EXPLORER ==================== -->
+  <rect x="253" y="41" width="705" height="345" fill="#0B111E" />
+
+  <!-- Explorer Toolbar -->
+  <rect x="266" y="54" width="310" height="28" rx="4" fill="#131C31" stroke="#334155" />
+  <text x="278" y="72" fill="#94A3B8" font-family="monospace" font-size="11">Snapshot: [v2.8-work] 2026-11-10 (42 files) ▾</text>
+
+  <rect x="586" y="54" width="210" height="28" rx="4" fill="#131C31" stroke="#334155" />
+  <text x="598" y="72" fill="#64748B" font-family="monospace" font-size="11">🔍 Filter files/folders...</text>
+
+  <rect x="806" y="54" width="138" height="28" rx="4" fill="#10B981" />
+  <text x="875" y="72" text-anchor="middle" fill="#06281E" font-family="monospace" font-size="11" font-weight="bold">Extract Selected</text>
+
+  <!-- Tree Header -->
+  <rect x="266" y="92" width="678" height="24" fill="#131C31" />
+  <text x="276" y="108" fill="#00E5FF" font-family="monospace" font-size="10" font-weight="bold">[x] NAME / HIERARCHY</text>
+  <text x="680" y="108" fill="#00E5FF" font-family="monospace" font-size="10" font-weight="bold">SIZE</text>
+  <text x="830" y="108" fill="#00E5FF" font-family="monospace" font-size="10" font-weight="bold">QUICK EXTRACT</text>
+
+  <!-- Accordion Tree Rows -->
+  <g font-family="monospace" font-size="11">
+    <!-- Row 1: Expanded Folder -->
+    <rect x="266" y="120" width="678" height="28" fill="#111A2E" />
+    <text x="276" y="138" fill="#38BDF8" font-weight="bold">[■] ▾ 📁 Documents/Projects</text>
+    <text x="680" y="138" fill="#94A3B8">12 files • 148.2 MB</text>
+
+    <!-- Row 2: Nested File -->
+    <rect x="266" y="150" width="678" height="28" fill="#0D1424" />
+    <text x="304" y="168" fill="#E2E8F0">[✓] 📄 architecture_spec.pdf</text>
+    <text x="680" y="168" fill="#94A3B8">14.6 MB (1 chunk)</text>
+    <rect x="820" y="155" width="54" height="18" rx="3" fill="#1E293B" stroke="#00E5FF" />
+    <text x="847" y="168" text-anchor="middle" fill="#00E5FF" font-size="9">Folder</text>
+    <rect x="880" y="155" width="58" height="18" rx="3" fill="#1E293B" stroke="#10B981" />
+    <text x="909" y="168" text-anchor="middle" fill="#10B981" font-size="9">Downloads</text>
+
+    <!-- Row 3: Nested File -->
+    <rect x="266" y="180" width="678" height="28" fill="#111A2E" />
+    <text x="304" y="198" fill="#E2E8F0">[✓] 📄 dataset_archive.tar.zst</text>
+    <text x="680" y="198" fill="#94A3B8">92.4 MB (5 chunks)</text>
+    <rect x="820" y="185" width="54" height="18" rx="3" fill="#1E293B" stroke="#00E5FF" />
+    <text x="847" y="198" text-anchor="middle" fill="#00E5FF" font-size="9">Folder</text>
+    <rect x="880" y="185" width="58" height="18" rx="3" fill="#1E293B" stroke="#10B981" />
+    <text x="909" y="198" text-anchor="middle" fill="#10B981" font-size="9">Downloads</text>
+
+    <!-- Row 4: Collapsed Folder -->
+    <rect x="266" y="210" width="678" height="28" fill="#0D1424" />
+    <text x="276" y="228" fill="#38BDF8" font-weight="bold">[ ] ▸ 📁 Photos/2026_Raw</text>
+    <text x="680" y="228" fill="#94A3B8">30 files • 612.0 MB</text>
+
+    <!-- In-Pane Extraction Status Banner -->
+    <rect x="266" y="346" width="678" height="28" rx="4" fill="#06281E" stroke="#10B981" />
+    <text x="280" y="364" fill="#10B981" font-size="11">✓ Extracted 'architecture_spec.pdf' to ~/Downloads/TeleBack (SHA-256 Verified)</text>
+  </g>
+
+  <!-- ==================== BOTTOM DOCKED TERMINAL CONSOLE (210px) ==================== -->
+  <line x1="252" y1="386" x2="960" y2="386" stroke="#00E5FF" stroke-width="1.5" />
+  <rect x="253" y="387" width="705" height="211" fill="#070B12" />
+
+  <text x="266" y="406" fill="#00E5FF" font-family="monospace" font-size="10" font-weight="bold">TERMINAL LOG STREAM // LIVE TELEMETRY</text>
+  <g font-family="monospace" font-size="11">
+    <text x="266" y="428" fill="#64748B">[01:08:12]</text><text x="342" y="428" fill="#38BDF8">[INFO]</text><text x="394" y="428" fill="#E2E8F0">Scanning local directory ~/Documents/Vault (42 files)...</text>
+    <text x="266" y="446" fill="#64748B">[01:08:13]</text><text x="342" y="446" fill="#10B981">[OK]</text><text x="394" y="446" fill="#10B981">AES-256-GCM Master Key unlocked in memory.</text>
+    <text x="266" y="464" fill="#64748B">[01:08:15]</text><text x="342" y="464" fill="#38BDF8">[SYNC]</text><text x="394" y="464" fill="#E2E8F0">Uploading chunk 1/5 (19.0 MB) -&gt; msg_id #4821 [SHA-256 OK]</text>
+    <text x="266" y="482" fill="#64748B">[01:08:18]</text><text x="342" y="482" fill="#10B981">[OK]</text><text x="394" y="482" fill="#10B981">Snapshot 'snap_1793518095' committed &amp; pinned to Telegram group.</text>
+    <text x="266" y="500" fill="#64748B">[01:08:19]</text><text x="342" y="500" fill="#38BDF8">[INFO]</text><text x="394" y="500" fill="#94A3B8">Retention check: 10/10 snapshots active (0 orphan chunks).</text>
+  </g>
+</svg>

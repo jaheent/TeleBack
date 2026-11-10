@@ -6,19 +6,18 @@
     android:viewportWidth="108"
     android:viewportHeight="108">
 
-    <!-- Concept 3: Decentralized Mesh Vault Background Gradient -->
+    <!-- Cyber-Wing Glider Background Gradient (Crisp Ice to Sky Blue) -->
     <path
         android:pathData="M0,0 H108 V108 H0 Z">
         <aapt:attr name="android:fillColor">
             <gradient
-                android:startX="108"
+                android:startX="0"
                 android:startY="0"
-                android:endX="0"
+                android:endX="108"
                 android:endY="108"
                 android:type="linear">
-                <item android:color="#0891B2" android:offset="0.0" />
-                <item android:color="#0369A1" android:offset="0.5" />
-                <item android:color="#0C1425" android:offset="1.0" />
+                <item android:color="#F4F9FF" android:offset="0.0" />
+                <item android:color="#D8ECFF" android:offset="1.0" />
             </gradient>
         </aapt:attr>
     </path>
